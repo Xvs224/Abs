@@ -1,0 +1,1395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>项目规划 - 基于异常检测的毕业论文全过程质量监控系统</title>
+<style>
+:root {
+  --primary: #2563eb;
+  --primary-dark: #1e40af;
+  --primary-light: #dbeafe;
+  --accent: #f59e0b;
+  --accent-light: #fef3c7;
+  --success: #16a34a;
+  --success-light: #dcfce7;
+  --danger: #dc2626;
+  --danger-light: #fee2e2;
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --text: #1e293b;
+  --text-secondary: #64748b;
+  --border: #e2e8f0;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-lg: 0 10px 30px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04);
+  --radius: 12px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+}
+
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 40px 24px;
+}
+
+/* Header */
+.header {
+  background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 50%, #3b82f6 100%);
+  color: white;
+  padding: 48px 32px;
+  border-radius: var(--radius);
+  margin-bottom: 32px;
+  position: relative;
+  overflow: hidden;
+}
+
+.header::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -10%;
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 70%);
+  border-radius: 50%;
+}
+
+.header h1 {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+.header .subtitle {
+  font-size: 15px;
+  opacity: 0.85;
+  position: relative;
+  z-index: 1;
+}
+
+.header .meta {
+  display: flex;
+  gap: 24px;
+  margin-top: 20px;
+  font-size: 13px;
+  opacity: 0.9;
+  position: relative;
+  z-index: 1;
+}
+
+.header .meta-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.header .meta-item::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.6);
+}
+
+/* Section */
+.section {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 32px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow);
+}
+
+.section-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--primary-light);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.section-title .icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--primary);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* Overview Cards */
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.overview-card {
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 20px;
+  border-left: 4px solid var(--primary);
+}
+
+.overview-card .label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.overview-card .value {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Tech Stack */
+.tech-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.tech-item {
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 18px;
+  border: 1px solid var(--border);
+}
+
+.tech-item .tech-category {
+  font-size: 11px;
+  color: var(--primary);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.tech-item .tech-name {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.tech-item .tech-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* Business Flow */
+.flow-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 0;
+}
+
+.flow-step {
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  position: relative;
+}
+
+.flow-step:nth-child(odd) {
+  background: var(--accent-light);
+  color: #92400e;
+}
+
+.flow-arrow {
+  color: var(--text-secondary);
+  font-size: 18px;
+}
+
+/* Timeline */
+.timeline {
+  position: relative;
+  padding-left: 0;
+}
+
+.timeline-day {
+  background: var(--bg);
+  border-radius: var(--radius);
+  margin-bottom: 20px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  transition: box-shadow 0.2s;
+}
+
+.timeline-day:hover {
+  box-shadow: var(--shadow-lg);
+}
+
+.timeline-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 24px;
+  background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+  color: white;
+}
+
+.timeline-day:nth-child(even) .timeline-header {
+  background: linear-gradient(135deg, #92400e, #d97706);
+}
+
+.timeline-day:nth-child(3n) .timeline-header {
+  background: linear-gradient(135deg, #065f46, #059669);
+}
+
+.timeline-day:nth-child(4n) .timeline-header {
+  background: linear-gradient(135deg, #6b21a8, #7c3aed);
+}
+
+.timeline-day:nth-child(5n) .timeline-header {
+  background: linear-gradient(135deg, #be123c, #e11d48);
+}
+
+.timeline-day:nth-child(6n) .timeline-header {
+  background: linear-gradient(135deg, #0c4a6e, #0284c7);
+}
+
+.timeline-day:nth-child(7n) .timeline-header {
+  background: linear-gradient(135deg, #44403c, #78716c);
+}
+
+.day-number {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.day-info .day-date {
+  font-size: 13px;
+  opacity: 0.85;
+  margin-bottom: 2px;
+}
+
+.day-info .day-theme {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.day-badge {
+  margin-left: auto;
+  background: rgba(255,255,255,0.2);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.timeline-body {
+  padding: 20px 24px;
+}
+
+.task-group {
+  margin-bottom: 16px;
+}
+
+.task-group:last-child {
+  margin-bottom: 0;
+}
+
+.task-group-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.task-group-title::before {
+  content: '';
+  width: 3px;
+  height: 14px;
+  background: var(--primary);
+  border-radius: 2px;
+}
+
+.task-list {
+  list-style: none;
+  padding-left: 0;
+}
+
+.task-list li {
+  padding: 6px 0 6px 24px;
+  position: relative;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.task-list li::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 14px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+}
+
+.task-list li strong {
+  color: var(--primary-dark);
+}
+
+.deliverable-box {
+  background: var(--success-light);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-top: 12px;
+  border-left: 3px solid var(--success);
+}
+
+.deliverable-box .deliverable-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--success);
+  margin-bottom: 4px;
+}
+
+.deliverable-box .deliverable-content {
+  font-size: 13px;
+  color: #166534;
+}
+
+/* Module table */
+.module-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.module-table th {
+  background: var(--primary);
+  color: white;
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 600;
+}
+
+.module-table th:first-child { border-radius: 8px 0 0 0; }
+.module-table th:last-child { border-radius: 0 8px 0 0; }
+
+.module-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.module-table tr:nth-child(even) td {
+  background: var(--bg);
+}
+
+.module-table .priority-tag {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tag-high { background: var(--danger-light); color: var(--danger); }
+.tag-medium { background: var(--accent-light); color: #92400e; }
+.tag-low { background: var(--success-light); color: var(--success); }
+
+/* Risk */
+.risk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.risk-card {
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 18px;
+  border-left: 4px solid var(--danger);
+}
+
+.risk-card .risk-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+
+.risk-card .risk-level {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  margin-bottom: 8px;
+}
+
+.risk-card .risk-solution {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* Milestone */
+.milestone-track {
+  display: flex;
+  justify-content: space-between;
+  position: relative;
+  margin: 24px 0;
+  padding: 0 20px;
+}
+
+.milestone-track::before {
+  content: '';
+  position: absolute;
+  top: 18px;
+  left: 40px;
+  right: 40px;
+  height: 3px;
+  background: var(--border);
+  z-index: 0;
+}
+
+.milestone {
+  text-align: center;
+  position: relative;
+  z-index: 1;
+  flex: 1;
+}
+
+.milestone-dot {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  margin: 0 auto 8px;
+  border: 4px solid var(--card);
+  box-shadow: 0 0 0 2px var(--primary);
+}
+
+.milestone:nth-child(2) .milestone-dot {
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.milestone:nth-child(3) .milestone-dot {
+  background: var(--success);
+  box-shadow: 0 0 0 2px var(--success);
+}
+
+.milestone-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.milestone-date {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* Anomaly Detection Section */
+.anomaly-flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 0;
+}
+
+.anomaly-step {
+  background: var(--card);
+  border: 2px solid var(--primary-light);
+  border-radius: 10px;
+  padding: 14px 20px;
+  text-align: center;
+  min-width: 140px;
+  position: relative;
+}
+
+.anomaly-step .step-num {
+  font-size: 11px;
+  color: var(--primary);
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.anomaly-step .step-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.anomaly-arrow {
+  color: var(--primary);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .container { padding: 16px 12px; }
+  .header { padding: 32px 20px; }
+  .header h1 { font-size: 22px; }
+  .section { padding: 20px; }
+  .overview-grid, .tech-grid, .risk-grid { grid-template-columns: 1fr; }
+  .flow-container { flex-direction: column; }
+  .flow-arrow { transform: rotate(90deg); }
+  .timeline-header { flex-wrap: wrap; }
+  .day-badge { margin-left: 0; }
+  .milestone-track { flex-direction: column; gap: 16px; }
+  .milestone-track::before { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- Header -->
+<div class="header">
+  <h1>基于异常检测的毕业论文全过程质量监控系统设计与实现</h1>
+  <div class="subtitle">毕业设计 · 一周项目规划书（2026.09.17 — 2026.09.23）</div>
+  <div class="meta">
+    <span class="meta-item">规划周期：7 天</span>
+    <span class="meta-item">核心交付：需求分析 + 系统设计 + 核心模块实现 + 异常检测</span>
+    <span class="meta-item">制定日期：2026-09-16</span>
+  </div>
+</div>
+
+<!-- 1. 项目概述 -->
+<div class="section">
+  <div class="section-title"><span class="icon">1</span> 项目概述</div>
+  <div class="overview-grid">
+    <div class="overview-card">
+      <div class="label">项目类型</div>
+      <div class="value">毕业设计（工程设计类）</div>
+    </div>
+    <div class="overview-card">
+      <div class="label">面向用户</div>
+      <div class="value">学生 / 指导教师 / 教学管理员</div>
+    </div>
+    <div class="overview-card">
+      <div class="label">核心特色</div>
+      <div class="value">异常检测智能功能</div>
+    </div>
+    <div class="overview-card">
+      <div class="label">业务闭环</div>
+      <div class="value">选题→开题→指导→中期→评阅→答辩→归档</div>
+    </div>
+  </div>
+  <p style="margin-top: 16px; font-size: 14px; color: var(--text-secondary);">
+    系统围绕毕业论文全过程质量监控的核心对象和业务流程开展服务，实现指导计划与过程记录、中期检查和问题整改、论文版本提交与查验、评阅答辩与成绩记录、质量统计和成果归档，形成完整业务闭环。核心智能化功能为基于统计阈值、四分位距、孤立森林等可解释方法的异常检测，识别关键业务指标异常并生成分级提示，支持人工复核与纠正。
+  </p>
+</div>
+
+<!-- 2. 技术选型 -->
+<div class="section">
+  <div class="section-title"><span class="icon">2</span> 技术选型方案</div>
+  <div class="tech-grid">
+    <div class="tech-item">
+      <div class="tech-category">后端框架</div>
+      <div class="tech-name">Python FastAPI</div>
+      <div class="tech-desc">异步高性能，自动生成 API 文档，便于集成 scikit-learn 异常检测</div>
+    </div>
+    <div class="tech-item">
+      <div class="tech-category">前端框架</div>
+      <div class="tech-name">Vue 3 + Element Plus</div>
+      <div class="tech-desc">组件丰富，适合管理后台与数据看板，生态成熟</div>
+    </div>
+    <div class="tech-item">
+      <div class="tech-category">数据库</div>
+      <div class="tech-name">MySQL 8.0</div>
+      <div class="tech-desc">关系型数据库，完整支持外键约束与事务</div>
+    </div>
+    <div class="tech-item">
+      <div class="tech-category">异常检测</div>
+      <div class="tech-name">scikit-learn</div>
+      <div class="tech-desc">Isolation Forest + IQR 统计方法，可解释性强</div>
+    </div>
+    <div class="tech-item">
+      <div class="tech-category">身份认证</div>
+      <div class="tech-name">JWT + RBAC</div>
+      <div class="tech-desc">基于角色的权限控制，最小必要原则授权</div>
+    </div>
+    <div class="tech-item">
+      <div class="tech-category">数据可视化</div>
+      <div class="tech-name">ECharts 5</div>
+      <div class="tech-desc">统计图表与异常检测结果展示</div>
+    </div>
+    <div class="tech-item">
+      <div class="tech-category">ORM</div>
+      <div class="tech-name">SQLAlchemy 2.0</div>
+      <div class="tech-desc">支持异步，模型驱动数据库设计</div>
+    </div>
+    <div class="tech-item">
+      <div class="tech-category">测试框架</div>
+      <div class="tech-name">Pytest + Vitest</div>
+      <div class="tech-desc">后端接口测试 + 前端组件测试</div>
+    </div>
+  </div>
+</div>
+
+<!-- 3. 业务流程 -->
+<div class="section">
+  <div class="section-title"><span class="icon">3</span> 核心业务流程闭环</div>
+  <div class="flow-container">
+    <div class="flow-step">选题确认</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">开题审核</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">过程指导</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">中期检查</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">论文评阅</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">答辩评价</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">成果归档</div>
+  </div>
+  <p style="text-align: center; margin-top: 12px; font-size: 13px; color: var(--text-secondary);">
+    每个环节均关联文档版本、格式检测、任务分配、问题定位、修改复检与审核报告，确保全链路可追溯
+  </p>
+</div>
+
+<!-- 4. 异常检测核心设计 -->
+<div class="section">
+  <div class="section-title"><span class="icon">4</span> 异常检测核心智能化功能设计</div>
+  
+  <h3 style="font-size: 15px; margin-bottom: 12px; color: var(--primary-dark);">检测流程</h3>
+  <div class="anomaly-flow">
+    <div class="anomaly-step">
+      <div class="step-num">Step 1</div>
+      <div class="step-title">特征构造</div>
+    </div>
+    <span class="anomaly-arrow">→</span>
+    <div class="anomaly-step">
+      <div class="step-num">Step 2</div>
+      <div class="step-title">异常识别</div>
+    </div>
+    <span class="anomaly-arrow">→</span>
+    <div class="anomaly-step">
+      <div class="step-num">Step 3</div>
+      <div class="step-title">分级提示</div>
+    </div>
+    <span class="anomaly-arrow">→</span>
+    <div class="anomaly-step">
+      <div class="step-num">Step 4</div>
+      <div class="step-title">人工复核</div>
+    </div>
+    <span class="anomaly-arrow">→</span>
+    <div class="anomaly-step">
+      <div class="step-num">Step 5</div>
+      <div class="step-title">纠正记录</div>
+    </div>
+    <span class="anomaly-arrow">→</span>
+    <div class="anomaly-step">
+      <div class="step-num">Step 6</div>
+      <div class="step-title">准确性评价</div>
+    </div>
+  </div>
+
+  <div style="margin-top: 24px;">
+    <h3 style="font-size: 15px; margin-bottom: 12px; color: var(--primary-dark);">关键检测指标（特征构造维度）</h3>
+    <table class="module-table">
+      <thead>
+        <tr>
+          <th>业务环节</th>
+          <th>检测特征</th>
+          <th>异常类型</th>
+          <th>检测方法</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>选题</td>
+          <td>选题重复率、选题方向偏离度</td>
+          <td>选题高度雷同 / 偏离培养方向</td>
+          <td>文本相似度 + IQR</td>
+        </tr>
+        <tr>
+          <td>开题</td>
+          <td>开题材料字数、参考文献数量、提交时间</td>
+          <td>材料过短 / 参考文献不足 / 迟交</td>
+          <td>统计阈值 + IQR</td>
+        </tr>
+        <tr>
+          <td>过程指导</td>
+          <td>指导次数、指导间隔天数、指导记录数</td>
+          <td>指导频次过低 / 间隔过长</td>
+          <td>IQR + 孤立森林</td>
+        </tr>
+        <tr>
+          <td>中期检查</td>
+          <td>进度完成率、问题整改率、检查评分</td>
+          <td>进度严重滞后 / 整改不力</td>
+          <td>孤立森林 + 统计阈值</td>
+        </tr>
+        <tr>
+          <td>论文版本</td>
+          <td>版本提交次数、修改幅度、格式规范率</td>
+          <td>版本数异常 / 格式不达标</td>
+          <td>IQR + 规则阈值</td>
+        </tr>
+        <tr>
+          <td>评阅答辩</td>
+          <td>评阅分数偏差、答辩评分异常、成绩分布</td>
+          <td>评分异常偏离 / 成绩分布异常</td>
+          <td>孤立森林 + IQR</td>
+        </tr>
+        <tr>
+          <td>综合</td>
+          <td>多维度特征向量（全过程指标聚合）</td>
+          <td>综合质量异常学生识别</td>
+          <td>孤立森林（多维）</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="margin-top: 20px;">
+    <h3 style="font-size: 15px; margin-bottom: 12px; color: var(--primary-dark);">分级提示策略</h3>
+    <table class="module-table">
+      <thead>
+        <tr>
+          <th>级别</th>
+          <th>颜色标识</th>
+          <th>含义</th>
+          <th>处理方式</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="priority-tag tag-low">L1 提示</span></td>
+          <td>蓝色</td>
+          <td>轻微偏离正常范围，可能为正常波动</td>
+          <td>系统自动记录，不强制干预</td>
+        </tr>
+        <tr>
+          <td><span class="priority-tag tag-medium">L2 警告</span></td>
+          <td>橙色</td>
+          <td>明显偏离，需关注但不紧急</td>
+          <td>通知指导教师查看，建议复核</td>
+        </tr>
+        <tr>
+          <td><span class="priority-tag tag-high">L3 告警</span></td>
+          <td>红色</td>
+          <td>严重偏离，疑似质量问题</td>
+          <td>强制人工复核，限期整改并记录</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- 5. 系统模块 -->
+<div class="section">
+  <div class="section-title"><span class="icon">5</span> 系统模块划分与优先级</div>
+  <table class="module-table">
+    <thead>
+      <tr>
+        <th>模块</th>
+        <th>核心功能</th>
+        <th>关键接口</th>
+        <th>优先级</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>身份认证与权限</td>
+        <td>用户登录、JWT 令牌、RBAC 三角色权限、操作日志</td>
+        <td>login / logout / refresh_token / check_permission</td>
+        <td><span class="priority-tag tag-high">P0</span></td>
+      </tr>
+      <tr>
+        <td>选题管理</td>
+        <td>题目申报、选题确认、重复检测、方向审核</td>
+        <td>submit_topic / approve_topic / check_duplicate</td>
+        <td><span class="priority-tag tag-high">P0</span></td>
+      </tr>
+      <tr>
+        <td>开题管理</td>
+        <td>开题报告提交、材料审核、开题答辩记录</td>
+        <td>submit_proposal / review_proposal / get_proposal_status</td>
+        <td><span class="priority-tag tag-high">P0</span></td>
+      </tr>
+      <tr>
+        <td>过程指导</td>
+        <td>指导计划制定、指导记录、指导意见、记录归档</td>
+        <td>create_plan / add_guidance / get_records</td>
+        <td><span class="priority-tag tag-high">P0</span></td>
+      </tr>
+      <tr>
+        <td>中期检查</td>
+        <td>中期报告提交、检查评分、问题整改、复检</td>
+        <td>submit_midterm / score_midterm / track_rectification</td>
+        <td><span class="priority-tag tag-high">P0</span></td>
+      </tr>
+      <tr>
+        <td>论文版本管理</td>
+        <td>版本提交、版本比对、格式规范检测、版本查验</td>
+        <td>submit_version / compare_versions / check_format</td>
+        <td><span class="priority-tag tag-high">P0</span></td>
+      </tr>
+      <tr>
+        <td>评阅答辩</td>
+        <td>评阅分配、评阅意见、答辩安排、成绩记录</td>
+        <td>assign_reviewer / submit_review / schedule_defense / record_score</td>
+        <td><span class="priority-tag tag-medium">P1</span></td>
+      </tr>
+      <tr>
+        <td>异常检测引擎</td>
+        <td>特征提取、IQR/孤立森林检测、分级提示、人工复核</td>
+        <td>detect_anomaly / get_anomaly_report / review_anomaly / correct_result</td>
+        <td><span class="priority-tag tag-high">P0</span></td>
+      </tr>
+      <tr>
+        <td>质量统计看板</td>
+        <td>多维度统计、可视化图表、趋势分析</td>
+        <td>get_statistics / get_dashboard / export_report</td>
+        <td><span class="priority-tag tag-medium">P1</span></td>
+      </tr>
+      <tr>
+        <td>成果归档</td>
+        <td>论文归档、档案管理、成果查询</td>
+        <td>archive_thesis / get_archive / search_archives</td>
+        <td><span class="priority-tag tag-low">P2</span></td>
+      </tr>
+      <tr>
+        <td>系统管理</td>
+        <td>用户管理、参数配置、操作日志、异常处理</td>
+        <td>manage_users / get_logs / get_config</td>
+        <td><span class="priority-tag tag-medium">P1</span></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- 6. 数据库设计概要 -->
+<div class="section">
+  <div class="section-title"><span class="icon">6</span> 数据库核心对象与关系设计</div>
+  <table class="module-table">
+    <thead>
+      <tr>
+        <th>核心表</th>
+        <th>关键字段</th>
+        <th>关联关系</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>users（用户表）</td>
+        <td>id, username, password_hash, role, real_name, department</td>
+        <td>1→N students / teachers / admins</td>
+      </tr>
+      <tr>
+        <td>topics（选题表）</td>
+        <td>id, student_id, title, direction, status, submit_time</td>
+        <td>N→1 users(student), 1→1 proposals</td>
+      </tr>
+      <tr>
+        <td>proposals（开题表）</td>
+        <td>id, topic_id, content, references_count, status, review_time</td>
+        <td>N→1 topics, 1→N guidance_records</td>
+      </tr>
+      <tr>
+        <td>guidance_plans（指导计划）</td>
+        <td>id, proposal_id, teacher_id, plan_content, frequency</td>
+        <td>N→1 proposals, 1→N guidance_records</td>
+      </tr>
+      <tr>
+        <td>guidance_records（指导记录）</td>
+        <td>id, plan_id, teacher_id, student_id, content, record_time</td>
+        <td>N→1 guidance_plans, N→1 users</td>
+      </tr>
+      <tr>
+        <td>midterm_checks（中期检查）</td>
+        <td>id, topic_id, progress, score, issues, rectification_status</td>
+        <td>N→1 topics, 1→N rectifications</td>
+      </tr>
+      <tr>
+        <td>thesis_versions（论文版本）</td>
+        <td>id, topic_id, version_num, file_path, format_check, submit_time</td>
+        <td>N→1 topics, 1→N format_checks</td>
+      </tr>
+      <tr>
+        <td>reviews（评阅表）</td>
+        <td>id, topic_id, reviewer_id, score, opinion, review_time</td>
+        <td>N→1 topics, N→1 users(reviewer)</td>
+      </tr>
+      <tr>
+        <td>defenses（答辩表）</td>
+        <td>id, topic_id, defense_time, score, result, recorder_id</td>
+        <td>N→1 topics</td>
+      </tr>
+      <tr>
+        <td>archives（归档表）</td>
+        <td>id, topic_id, final_version_id, archive_time, archive_path</td>
+        <td>N→1 topics, N→1 thesis_versions</td>
+      </tr>
+      <tr>
+        <td>anomaly_records（异常记录）</td>
+        <td>id, target_type, target_id, feature_data, anomaly_score, level, status</td>
+        <td>多态关联各业务表, 1→N anomaly_reviews</td>
+      </tr>
+      <tr>
+        <td>anomaly_reviews（人工复核）</td>
+        <td>id, anomaly_id, reviewer_id, result, correction, review_time</td>
+        <td>N→1 anomaly_records, N→1 users</td>
+      </tr>
+      <tr>
+        <td>operation_logs（操作日志）</td>
+        <td>id, user_id, action, target, detail, ip, create_time</td>
+        <td>N→1 users</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- 7. 一周工作计划 -->
+<div class="section">
+  <div class="section-title"><span class="icon">7</span> 一周详细工作计划（9.17 — 9.23）</div>
+
+  <!-- Milestone Track -->
+  <div class="milestone-track">
+    <div class="milestone">
+      <div class="milestone-dot">M1</div>
+      <div class="milestone-label">需求与设计完成</div>
+      <div class="milestone-date">9/18 (周五)</div>
+    </div>
+    <div class="milestone">
+      <div class="milestone-dot">M2</div>
+      <div class="milestone-label">核心模块可运行</div>
+      <div class="milestone-date">9/21 (周一)</div>
+    </div>
+    <div class="milestone">
+      <div class="milestone-dot">M3</div>
+      <div class="milestone-label">测试与文档交付</div>
+      <div class="milestone-date">9/23 (周三)</div>
+    </div>
+  </div>
+
+  <div class="timeline">
+
+    <!-- Day 1 -->
+    <div class="timeline-day">
+      <div class="timeline-header">
+        <div class="day-number">D1</div>
+        <div class="day-info">
+          <div class="day-date">9月17日 周四</div>
+          <div class="day-theme">需求分析与系统设计</div>
+        </div>
+        <div class="day-badge">阶段一：设计</div>
+      </div>
+      <div class="timeline-body">
+        <div class="task-group">
+          <div class="task-group-title">需求分析</div>
+          <ul class="task-list">
+            <li>梳理<strong>三类用户角色</strong>（学生 / 教师 / 管理员）的详细用例，编写用例图</li>
+            <li>明确<strong>七大业务环节</strong>的输入、输出、状态流转规则</li>
+            <li>确定异常检测的<strong>关键指标定义</strong>和数据来源</li>
+            <li>编写<strong>需求规格说明书</strong>初稿（功能需求 + 非功能需求）</li>
+          </ul>
+        </div>
+        <div class="task-group">
+          <div class="task-group-title">系统架构设计</div>
+          <ul class="task-list">
+            <li>确定<strong>前后端分离架构</strong>：FastAPI 后端 + Vue 3 前端</li>
+            <li>设计系统分层结构：路由层 → 服务层 → 数据层 → 异常检测引擎</li>
+            <li>规划项目目录结构与模块划分</li>
+            <li>绘制<strong>系统架构图</strong>和<strong>部署架构图</strong></li>
+          </ul>
+        </div>
+        <div class="deliverable-box">
+          <div class="deliverable-label">交付物</div>
+          <div class="deliverable-content">需求规格说明书 · 用例图 · 系统架构图 · 项目目录结构</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Day 2 -->
+    <div class="timeline-day">
+      <div class="timeline-header">
+        <div class="day-number">D2</div>
+        <div class="day-info">
+          <div class="day-date">9月18日 周五</div>
+          <div class="day-theme">数据库设计与 API 规范</div>
+        </div>
+        <div class="day-badge">阶段一：设计</div>
+      </div>
+      <div class="timeline-body">
+        <div class="task-group">
+          <div class="task-group-title">数据库设计</div>
+          <ul class="task-list">
+            <li>绘制<strong>ER 图</strong>，明确核心实体及关联关系（用户→选题→开题→指导→中期→版本→评阅→答辩→归档）</li>
+            <li>设计<strong>异常记录表与人工复核表</strong>的多态关联结构</li>
+            <li>编写<strong>建表 SQL 脚本</strong>（含索引、外键约束、字段注释）</li>
+            <li>设计<strong>操作日志表</strong>统一记录方案</li>
+            <li>准备<strong>模拟/脱敏测试数据</strong>生成脚本（50+ 学生规模）</li>
+          </ul>
+        </div>
+        <div class="task-group">
+          <div class="task-group-title">API 接口规范</div>
+          <ul class="task-list">
+            <li>定义<strong>RESTful API 规范</strong>（路径、方法、请求/响应格式）</li>
+            <li>编写各模块核心接口文档（OpenAPI / Swagger 自动生成）</li>
+            <li>设计<strong>统一响应格式</strong>与<strong>错误码体系</strong></li>
+            <li>规划分页查询、数据校验（Pydantic Schema）规范</li>
+          </ul>
+        </div>
+        <div class="deliverable-box">
+          <div class="deliverable-label">交付物</div>
+          <div class="deliverable-content">ER 图 · 建表 SQL · API 接口文档 · 统一响应规范 · 测试数据脚本</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Day 3 -->
+    <div class="timeline-day">
+      <div class="timeline-header">
+        <div class="day-number">D3</div>
+        <div class="day-info">
+          <div class="day-date">9月19日 周六</div>
+          <div class="day-theme">后端框架搭建与基础模块</div>
+        </div>
+        <div class="day-badge">阶段二：实现</div>
+      </div>
+      <div class="timeline-body">
+        <div class="task-group">
+          <div class="task-group-title">项目初始化</div>
+          <ul class="task-list">
+            <li>搭建 FastAPI 项目骨架（路由注册、中间件、异常处理器）</li>
+            <li>配置 <strong>SQLAlchemy ORM</strong> 模型映射，初始化数据库连接</li>
+            <li>实现<strong>统一响应封装</strong>与全局异常处理中间件</li>
+            <li>配置 CORS、日志记录、环境变量管理</li>
+          </ul>
+        </div>
+        <div class="task-group">
+          <div class="task-group-title">身份认证与权限</div>
+          <ul class="task-list">
+            <li>实现<strong>JWT 令牌</strong>签发与验证（登录/登出/刷新）</li>
+            <li>实现<strong>RBAC 权限控制</strong>装饰器（学生 / 教师 / 管理员三角色）</li>
+            <li>实现<strong>操作日志中间件</strong>自动记录关键操作</li>
+            <li>实现数据校验（Pydantic Schema 入参验证）</li>
+          </ul>
+        </div>
+        <div class="task-group">
+          <div class="task-group-title">用户管理模块</div>
+          <ul class="task-list">
+            <li>用户 CRUD 接口 + 分页查询</li>
+            <li>密码加密存储（bcrypt）</li>
+            <li>角色分配与权限查询</li>
+          </ul>
+        </div>
+        <div class="deliverable-box">
+          <div class="deliverable-label">交付物</div>
+          <div class="deliverable-content">可运行后端骨架 · 认证权限模块 · 用户管理接口 · Swagger 文档可访问</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Day 4 -->
+    <div class="timeline-day">
+      <div class="timeline-header">
+        <div class="day-number">D4</div>
+        <div class="day-info">
+          <div class="day-date">9月20日 周日</div>
+          <div class="day-theme">异常检测引擎与核心业务模块</div>
+        </div>
+        <div class="day-badge">阶段二：实现</div>
+      </div>
+      <div class="timeline-body">
+        <div class="task-group">
+          <div class="task-group-title">异常检测引擎（核心）</div>
+          <ul class="task-list">
+            <li>实现<strong>特征构造模块</strong>：从各业务表聚合关键指标为特征向量</li>
+            <li>实现<strong>IQR 四分位距检测</strong>方法（单维度异常）</li>
+            <li>实现<strong>孤立森林 Isolation Forest</strong>检测方法（多维异常）</li>
+            <li>实现<strong>分级提示</strong>逻辑（L1提示 / L2警告 / L3告警）</li>
+            <li>实现<strong>人工复核与纠正记录</strong>接口</li>
+            <li>实现<strong>准确性评价</strong>模块（使用正常临界与异常样例评估）</li>
+          </ul>
+        </div>
+        <div class="task-group">
+          <div class="task-group-title">核心业务模块</div>
+          <ul class="task-list">
+            <li>选题管理：题目申报、选题确认、<strong>重复检测</strong></li>
+            <li>开题管理：开题报告提交、材料审核、状态流转</li>
+            <li>过程指导：指导计划 CRUD、指导记录 CRUD</li>
+            <li>中期检查：中期报告提交、评分、<strong>问题整改与复检</strong></li>
+            <li>论文版本：版本提交、<strong>格式规范检测</strong>、版本查验</li>
+            <li>评阅答辩：评阅分配、评阅意见、答辩安排、成绩记录</li>
+            <li>成果归档：论文归档、档案查询</li>
+          </ul>
+        </div>
+        <div class="task-group">
+          <div class="task-group-title">模块间关联一致性</div>
+          <ul class="task-list">
+            <li>确保<strong>文档版本→格式检测→任务问题→修改复检→审核报告</strong>全链路关联</li>
+            <li>实现业务状态流转校验（不可跳转/回退规则）</li>
+          </ul>
+        </div>
+        <div class="deliverable-box">
+          <div class="deliverable-label">交付物</div>
+          <div class="deliverable-content">异常检测引擎 · 全部核心业务接口 · 状态流转逻辑 · 关联一致性保障</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Day 5 -->
+    <div class="timeline-day">
+      <div class="timeline-header">
+        <div class="day-number">D5</div>
+        <div class="day-info">
+          <div class="day-date">9月21日 周一</div>
+          <div class="day-theme">前端开发与数据可视化</div>
+        </div>
+        <div class="day-badge">阶段二：实现</div>
+      </div>
+      <div class="timeline-body">
+        <div class="task-group">
+          <div class="task-group-title">前端项目搭建</div>
+          <ul class="task-list">
+            <li>初始化 Vue 3 + Vite 项目，集成 Element Plus</li>
+            <li>实现<strong>路由守卫与权限控制</strong>（基于角色动态路由）</li>
+            <li>封装 Axios 请求拦截器（JWT 携带、统一错误处理）</li>
+            <li>搭建后台管理布局（侧边栏导航 + 顶栏 + 内容区）</li>
+          </ul>
+        </div>
+        <div class="task-group">
+          <div class="task-group-title">核心页面开发</div>
+          <ul class="task-list">
+            <li>登录页 + 个人中心</li>
+            <li>选题管理页（申报表单 + 列表 + 确认）</li>
+            <li>开题管理页（报告提交 + 审核流程）</li>
+            <li>过程指导页（指导计划 + 记录时间线）</li>
+            <li>中期检查页（报告 + 整改追踪）</li>
+            <li>论文版本管理页（版本列表 + 格式检测结果）</li>
+            <li>评阅答辩页（评阅表 + 答辩安排 + 成绩）</li>
+          </ul>
+        </div>
+        <div class="task-group">
+          <div class="task-group-title">异常检测与可视化</div>
+          <ul class="task-list">
+            <li>异常检测结果页：<strong>分级提示卡片</strong>（颜色标识 L1/L2/L3）</li>
+            <li>人工复核面板：复核操作 + 纠正记录</li>
+            <li><strong>质量统计看板</strong>：ECharts 多维度统计图表</li>
+            <li>操作日志查看页</li>
+          </ul>
+        </div>
+        <div class="deliverable-box">
+          <div class="deliverable-label">交付物</div>
+          <div class="deliverable-content">前端完整页面 · 异常检测可视化 · 质量统计看板 · 前后端联调通过</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Day 6 -->
+    <div class="timeline-day">
+      <div class="timeline-header">
+        <div class="day-number">D6</div>
+        <div class="day-info">
+          <div class="day-date">9月22日 周二</div>
+          <div class="day-theme">测试、评估与问题修复</div>
+        </div>
+        <div class="day-badge">阶段三：测试</div>
+      </div>
+      <div class="timeline-body">
+        <div class="task-group">
+          <div class="task-group-title">接口测试</div>
+          <ul class="task-list">
+            <li>编写<strong>Pytest 单元测试</strong>覆盖核心模块主要接口</li>
+            <li>测试身份认证、权限控制、数据校验的边界情况</li>
+            <li>测试分页查询、操作日志、异常处理的正确性</li>
+            <li>测试业务状态流转规则（非法跳转/回退拦截）</li>
+          </ul>
+        </div>
+        <div class="task-group">
+          <div class="task-group-title">异常流程测试</div>
+          <ul class="task-list">
+            <li>构造<strong>正常临界样例</strong>与<strong>异常样例</strong>数据集</li>
+            <li>测试异常检测全流程：特征构造→检测→分级→复核→纠正</li>
+            <li>评估<strong>准确性</strong>（准确率 / 召回率）与<strong>误报情况</strong></li>
+            <li>测试文档版本→格式检测→修改复检→审核报告的关联一致性</li>
+            <li>记录评估结果并调优检测参数（IQR 系数、孤立森林参数）</li>
+          </ul>
+        </div>
+        <div class="task-group">
+          <div class="task-group-title">Bug 修复与优化</div>
+          <ul class="task-list">
+            <li>修复测试中发现的问题</li>
+            <li>优化分页查询性能（索引调优）</li>
+            <li>完善前端交互体验</li>
+          </ul>
+        </div>
+        <div class="deliverable-box">
+          <div class="deliverable-label">交付物</div>
+          <div class="deliverable-content">测试报告 · 异常检测评估报告 · Bug 修复完成 · 参数调优结果</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Day 7 -->
+    <div class="timeline-day">
+      <div class="timeline-header">
+        <div class="day-number">D7</div>
+        <div class="day-info">
+          <div class="day-date">9月23日 周三</div>
+          <div class="day-theme">文档撰写与演示准备</div>
+        </div>
+        <div class="day-badge">阶段三：交付</div>
+      </div>
+      <div class="timeline-body">
+        <div class="task-group">
+          <div class="task-group-title">技术文档</div>
+          <ul class="task-list">
+            <li>撰写<strong>系统设计说明书</strong>（架构设计 + 数据库设计 + 模块设计）</li>
+            <li>完善<strong>API 接口文档</strong>（Swagger 在线版）</li>
+            <li>编写<strong>部署手册</strong>（环境要求 + 安装步骤 + 配置说明）</li>
+            <li>编写<strong>异常检测算法说明文档</strong>（方法选择 + 特征定义 + 参数说明 + 评估结果）</li>
+          </ul>
+        </div>
+        <div class="task-group">
+          <div class="task-group-title">演示准备</div>
+          <ul class="task-list">
+            <li>准备<strong>模拟/脱敏数据</strong>（50+ 学生、10+ 教师、完整业务流程数据）</li>
+            <li>按<strong>最小必要原则</strong>配置演示账号权限（不收集无关个人信息）</li>
+            <li>录制<strong>核心功能演示</strong>（业务闭环 + 异常检测 + 可视化看板）</li>
+            <li>准备<strong>典型异常流程演示</strong>（异常识别→分级→复核→纠正→评价）</li>
+          </ul>
+        </div>
+        <div class="task-group">
+          <div class="task-group-title">项目收尾</div>
+          <ul class="task-list">
+            <li>整理项目源码，编写 README</li>
+            <li>检查数据库外键完整性、索引合理性</li>
+            <li>一周工作复盘与下一阶段规划</li>
+          </ul>
+        </div>
+        <div class="deliverable-box">
+          <div class="deliverable-label">交付物</div>
+          <div class="deliverable-content">系统设计说明书 · 部署手册 · 算法说明文档 · 演示数据 · 演示录屏 · 项目 README</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- 8. 风险管理 -->
+<div class="section">
+  <div class="section-title"><span class="icon">8</span> 风险识别与应对</div>
+  <div class="risk-grid">
+    <div class="risk-card" style="border-left-color: var(--danger);">
+      <span class="risk-level tag-high" style="display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; background: var(--danger-light); color: var(--danger); margin-bottom: 8px;">高风险</span>
+      <div class="risk-title">异常检测准确性不足</div>
+      <div class="risk-solution">准备充分的正常/异常样例数据；先用 IQR 做基线，再引入孤立森林对比；保留人工复核兜底，检测准确率目标 ≥ 80%</div>
+    </div>
+    <div class="risk-card" style="border-left-color: var(--accent);">
+      <span class="risk-level tag-medium" style="display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; background: var(--accent-light); color: #92400e; margin-bottom: 8px;">中风险</span>
+      <div class="risk-title">模块间关联一致性复杂</div>
+      <div class="risk-solution">Day 2 数据库设计时严格定义外键与状态流转规则；Day 4 实现时编写关联一致性校验函数；Day 6 重点测试全链路</div>
+    </div>
+    <div class="risk-card" style="border-left-color: var(--accent);">
+      <span class="risk-level tag-medium" style="display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; background: var(--accent-light); color: #92400e; margin-bottom: 8px;">中风险</span>
+      <div class="risk-title">一周工期紧张</div>
+      <div class="risk-solution">按 P0/P1/P2 优先级排序；若延期则 P2 归档模块可简化为基础 CRUD；前端用 Element Plus 组件快速搭建</div>
+    </div>
+    <div class="risk-card" style="border-left-color: var(--success);">
+      <span class="risk-level tag-low" style="display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; background: var(--success-light); color: var(--success); margin-bottom: 8px;">低风险</span>
+      <div class="risk-title">格式规范检测实现</div>
+      <div class="risk-solution">采用规则匹配方法（正则 + 模板比对），不做全量 Word 解析；检测项精简为字数、章节结构、参考文献格式</div>
+    </div>
+  </div>
+</div>
+
+<!-- 9. 每日时间分配建议 -->
+<div class="section">
+  <div class="section-title"><span class="icon">9</span> 每日时间分配建议</div>
+  <table class="module-table">
+    <thead>
+      <tr>
+        <th>时段</th>
+        <th>时长</th>
+        <th>建议内容</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>上午 09:00 — 12:00</td>
+        <td>3 小时</td>
+        <td>核心开发任务（编码 / 设计 / 实现）</td>
+      </tr>
+      <tr>
+        <td>下午 14:00 — 17:00</td>
+        <td>3 小时</td>
+        <td>核心开发任务（编码 / 测试 / 调试）</td>
+      </tr>
+      <tr>
+        <td>晚上 19:00 — 21:00</td>
+        <td>2 小时</td>
+        <td>文档撰写 / 代码审查 / 复盘总结</td>
+      </tr>
+      <tr>
+        <td>每日合计</td>
+        <td><strong>8 小时</strong></td>
+        <td>保持节奏，周末可适当调整</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- 10. 下一阶段展望 -->
+<div class="section">
+  <div class="section-title"><span class="icon">10</span> 一周后展望与后续规划</div>
+  <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 16px;">
+    本周完成后，系统将具备完整的业务闭环和异常检测核心功能。后续阶段建议：
+  </p>
+  <ul class="task-list">
+    <li><strong>第 2 周</strong>：论文写作——撰写毕业论文绪论、相关技术、需求分析章节</li>
+    <li><strong>第 3 周</strong>：系统优化——性能优化、安全加固、前端交互打磨</li>
+    <li><strong>第 4 周</strong>：论文写作——系统设计与实现章节 + 测试章节</li>
+    <li><strong>第 5 周</strong>：异常检测深化——增加更多检测维度、对比多种算法效果</li>
+    <li><strong>第 6 周</strong>：论文完善——总结与展望、摘要、参考文献、格式排版</li>
+    <li><strong>第 7 周</strong>：答辩准备——PPT 制作、演示视频、答辩演练</li>
+  </ul>
+</div>
+
+</div>
+</body>
+</html>
