@@ -1,3 +1,52 @@
+/* ============================================================
+   统一设计令牌体系 (Design Tokens)
+   - 中性色 / 间距 / 圆角 / 阴影 为两端共享
+   - 主色 / 侧边栏配色 通过 role 主题在各布局根节点覆盖
+   ============================================================ */
+
+:root {
+  /* 中性色 - 共享 */
+  --color-text-primary: #303133;
+  --color-text-regular: #606266;
+  --color-text-secondary: #909399;
+  --color-text-placeholder: #c0c4cc;
+  --color-border: #e4e7ed;
+  --color-border-light: #ebeef5;
+  --color-border-lighter: #f2f6fc;
+  --color-fill: #f5f7fa;
+  --color-fill-light: #fafafa;
+
+  /* 页面 / 卡片背景 - 共享 */
+  --bg-page: #f5f7fa;
+  --bg-card: #ffffff;
+  --bg-mask: rgba(0, 0, 0, 0.5);
+
+  /* 圆角 - 共享 */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  /* 阴影 - 共享 */
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 2px 12px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 6px 24px rgba(0, 0, 0, 0.1);
+
+  /* 布局尺寸 - 共享 */
+  --sidebar-width: 220px;
+  --sidebar-collapsed-width: 64px;
+  --header-height: 60px;
+
+  /* 功能色 - 共享 */
+  --color-success: #67c23a;
+  --color-warning: #e6a23c;
+  --color-danger: #f56c6c;
+  --color-info: #909399;
+
+  /* 过渡 - 共享 */
+  --transition-base: all 0.2s ease;
+}
+
 /* 全局样式 */
 * {
   margin: 0;
@@ -15,8 +64,8 @@ html, body, #app {
 }
 
 body {
-  background-color: #f5f7fa;
-  color: #303133;
+  background-color: var(--bg-page);
+  color: var(--color-text-primary);
   font-size: 14px;
   line-height: 1.5;
 }
@@ -88,35 +137,35 @@ ul, ol {
 
 .p-20 { padding: 20px; }
 
-/* 卡片样式 */
+/* 卡片样式 - 共享 */
 .card {
-  background: #fff;
-  border-radius: 8px;
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
   padding: 20px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-md);
 }
 
-/* 异常等级标签 */
+/* 异常等级标签 - 共享 */
 .anomaly-L1 {
   color: #409eff;
   background: #ecf5ff;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
 }
 
 .anomaly-L2 {
-  color: #e6a23c;
+  color: var(--color-warning);
   background: #fdf6ec;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
 }
 
 .anomaly-L3 {
-  color: #f56c6c;
+  color: var(--color-danger);
   background: #fef0f0;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
 }

@@ -7,7 +7,7 @@
           <el-select v-model="searchForm.status" placeholder="全部状态" clearable style="width: 140px">
             <el-option label="待审核" value="pending" />
             <el-option label="已归档" value="archived" />
-            <el-option label="已退回" value="rejected" />
+            <el-option label="已退回" value="returned" />
           </el-select>
         </el-form-item>
         <el-form-item label="关键词">
@@ -45,18 +45,17 @@
         style="width: 100%"
       >
         <el-table-column type="index" label="序号" width="60" align="center" />
-        <el-table-column prop="thesis_title" label="论文题目" min-width="200" show-overflow-tooltip>
+        <el-table-column prop="topic_title" label="论文题目" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">
-            <el-button type="primary" link @click="handleView(row)">{{ row.thesis_title }}</el-button>
+            <el-button type="primary" link @click="handleView(row)">{{ row.topic_title }}</el-button>
           </template>
         </el-table-column>
         <el-table-column prop="student_name" label="学生" width="100" />
         <el-table-column prop="teacher_name" label="指导教师" width="100" />
-        <el-table-column prop="department" label="院系" width="140" show-overflow-tooltip />
-        <el-table-column prop="defense_score" label="答辩成绩" width="100" align="center">
+        <el-table-column prop="final_score" label="答辩成绩" width="100" align="center">
           <template #default="{ row }">
-            <span v-if="row.defense_score !== undefined && row.defense_score !== null" :class="scoreClass(row.defense_score)">
-              {{ row.defense_score }}
+            <span v-if="row.final_score !== undefined && row.final_score !== null" :class="scoreClass(row.final_score)">
+              {{ row.final_score }}
             </span>
             <span v-else class="text-muted">-</span>
           </template>
@@ -68,9 +67,9 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="submitted_at" label="提交时间" width="160">
+        <el-table-column prop="archive_time" label="归档时间" width="160">
           <template #default="{ row }">
-            {{ formatTime(row.submitted_at) }}
+            {{ formatTime(row.archive_time) }}
           </template>
         </el-table-column>
         <el-table-column label="操作" width="220" fixed="right" align="center">
@@ -83,6 +82,11 @@
               <el-button type="danger" link size="small" @click="handleReject(row)">
                 退回
               </el-button>
+            </template>
+            <!-- 管理员可删除/重交 -->
+            <template v-if="isAdmin">
+              <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+              <el-button type="warning" link size="small" @click="handleResubmit(row)">重交</el-button>
             </template>
           </template>
         </el-table-column>
@@ -111,21 +115,20 @@
       <div v-loading="detailLoading" class="archive-detail">
         <template v-if="currentDetail">
           <el-descriptions :column="2" border>
-            <el-descriptions-item label="论文题目" :span="2">{{ currentDetail.thesis_title }}</el-descriptions-item>
+            <el-descriptions-item label="论文题目" :span="2">{{ currentDetail.topic_title }}</el-descriptions-item>
             <el-descriptions-item label="学生">{{ currentDetail.student_name || '-' }}</el-descriptions-item>
             <el-descriptions-item label="学号">{{ currentDetail.student_id || '-' }}</el-descriptions-item>
             <el-descriptions-item label="指导教师">{{ currentDetail.teacher_name || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="院系">{{ currentDetail.department || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="专业">{{ currentDetail.major || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="归档编号">{{ currentDetail.archive_no || '-' }}</el-descriptions-item>
             <el-descriptions-item label="答辩成绩">
-              <span v-if="currentDetail.defense_score !== undefined" :class="scoreClass(currentDetail.defense_score)">
-                {{ currentDetail.defense_score }}
+              <span v-if="currentDetail.final_score !== undefined" :class="scoreClass(currentDetail.final_score)">
+                {{ currentDetail.final_score }}
               </span>
               <span v-else>-</span>
             </el-descriptions-item>
             <el-descriptions-item label="答辩结果">
-              <el-tag :type="defenseResultTagType(currentDetail.defense_result)" size="small">
-                {{ defenseResultLabel(currentDetail.defense_result) }}
+              <el-tag :type="finalGradeTagType(currentDetail.final_grade)" size="small">
+                {{ finalGradeLabel(currentDetail.final_grade) }}
               </el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="归档状态">
@@ -133,24 +136,23 @@
                 {{ statusLabel(currentDetail.status) }}
               </el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="归档编号">{{ currentDetail.archive_no || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="提交时间" :span="2">{{ formatTime(currentDetail.submitted_at) }}</el-descriptions-item>
+            <el-descriptions-item label="归档地点">{{ currentDetail.archive_location || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="归档时间" :span="2">{{ formatTime(currentDetail.archive_time) }}</el-descriptions-item>
           </el-descriptions>
 
           <el-divider content-position="left">归档材料</el-divider>
           <div class="archive-files">
-            <div v-for="(file, idx) in currentDetail.files || []" :key="idx" class="file-item">
+            <div v-for="(file, idx) in archiveFileList(currentDetail)" :key="idx" class="file-item">
               <el-icon><Document /></el-icon>
               <span class="file-name">{{ file.name }}</span>
-              <span class="file-size">{{ formatFileSize(file.size) }}</span>
-              <el-button type="primary" link size="small">下载</el-button>
+              <el-button type="primary" link size="small" @click="handleDownload(file.path)">下载</el-button>
             </div>
-            <el-empty v-if="!currentDetail.files?.length" description="暂无归档材料" :image-size="60" />
+            <el-empty v-if="archiveFileList(currentDetail).length === 0" description="暂无归档材料" :image-size="60" />
           </div>
 
-          <el-divider content-position="left" v-if="currentDetail.review_comment">审核意见</el-divider>
-          <div v-if="currentDetail.review_comment" class="review-comment">
-            {{ currentDetail.review_comment }}
+          <el-divider content-position="left" v-if="currentDetail.return_reason">退回原因</el-divider>
+          <div v-if="currentDetail.return_reason" class="review-comment">
+            {{ currentDetail.return_reason }}
           </div>
         </template>
       </div>
@@ -164,18 +166,26 @@
       :close-on-click-modal="false"
     >
       <el-form :model="reviewForm" label-width="80px">
-        <el-form-item label="审核意见">
+        <el-form-item label="退回原因" v-if="reviewAction === 'returned'">
           <el-input
-            v-model="reviewForm.comment"
+            v-model="reviewForm.return_reason"
             type="textarea"
             :rows="4"
-            :placeholder="reviewAction === 'archived' ? '请输入审核意见（选填）' : '请输入退回原因'"
+            placeholder="请输入退回原因"
+          />
+        </el-form-item>
+        <el-form-item label="审核意见" v-else>
+          <el-input
+            v-model="reviewForm.return_reason"
+            type="textarea"
+            :rows="4"
+            placeholder="请输入审核意见（选填）"
           />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="reviewVisible = false">取消</el-button>
-        <el-button :type="reviewAction === 'archived' ? 'success' : 'danger'" :loading="reviewLoading" @click="submitReview">
+        <el-button :type="reviewAction === 'archived' ? 'success' : 'danger'" :loading="reviewLoading" v-if='isTeacher' @click="submitReview">
           确认{{ reviewAction === 'archived' ? '通过' : '退回' }}
         </el-button>
       </template>
@@ -184,11 +194,17 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { useUserStore } from '@/store/user' 
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Refresh, RefreshRight, Document } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import dayjs from 'dayjs'
+
+
+const userStore = useUserStore()
+const isTeacher = computed(() => userStore.userInfo?.role === 'teacher')
+const isAdmin = computed(() => userStore.userInfo?.role === 'admin')
 
 const loading = ref(false)
 const detailLoading = ref(false)
@@ -211,7 +227,7 @@ const searchForm = reactive({
 })
 
 const reviewForm = reactive({
-  comment: ''
+  return_reason: ''
 })
 
 let currentRow = null
@@ -220,7 +236,7 @@ const statusLabel = (status) => {
   const map = {
     pending: '待审核',
     archived: '已归档',
-    rejected: '已退回'
+    returned: '已退回'
   }
   return map[status] || status
 }
@@ -229,29 +245,30 @@ const statusTagType = (status) => {
   const map = {
     pending: 'warning',
     archived: 'success',
-    rejected: 'danger'
+    returned: 'danger'
   }
   return map[status] || 'info'
 }
 
-const defenseResultLabel = (result) => {
+const finalGradeLabel = (grade) => {
   const map = {
     excellent: '优秀',
     good: '良好',
+    medium: '中等',
     pass: '合格',
     fail: '不合格'
   }
-  return map[result] || result || '-'
+  return map[grade] || grade || '-'
 }
 
-const defenseResultTagType = (result) => {
+const finalGradeTagType = (grade) => {
   const map = {
     excellent: 'success',
     good: 'primary',
     pass: 'info',
     fail: 'danger'
   }
-  return map[result] || 'info'
+  return map[grade] || 'info'
 }
 
 const scoreClass = (score) => {
@@ -263,11 +280,41 @@ const scoreClass = (score) => {
 
 const formatTime = (time) => time ? dayjs(time).format('YYYY-MM-DD HH:mm') : '-'
 
-const formatFileSize = (bytes) => {
-  if (!bytes) return '-'
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB'
-  return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
+const handleDownload = async (filePath) => {
+  if (!filePath) {
+    ElMessage.warning('文件路径为空')
+    return
+  }
+  try {
+    const token = userStore.token || ''
+    const url = `/api/files/download?path=${encodeURIComponent(filePath)}`
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    if (!res.ok) throw new Error('下载失败')
+    const blob = await res.blob()
+    const downloadUrl = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = downloadUrl
+    a.download = filePath.split(/[\\/]/).pop() || 'download'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(downloadUrl)
+  } catch (error) {
+    console.error('下载失败:', error)
+    ElMessage.error('下载失败：' + (error.message || '未知错误'))
+  }
+}
+
+const archiveFileList = (detail) => {
+  if (!detail) return []
+  const files = []
+  if (detail.thesis_file) files.push({ name: '最终论文', path: detail.thesis_file })
+  if (detail.proposal_file) files.push({ name: '开题报告', path: detail.proposal_file })
+  if (detail.midterm_file) files.push({ name: '中期检查', path: detail.midterm_file })
+  if (detail.review_file) files.push({ name: '评阅书', path: detail.review_file })
+  if (detail.defense_file) files.push({ name: '答辩材料', path: detail.defense_file })
+  if (detail.other_materials) files.push({ name: '其他材料', path: detail.other_materials })
+  return files
 }
 
 const loadList = async () => {
@@ -314,22 +361,46 @@ const handleView = async (row) => {
   }
 }
 
+const handleDelete = (row) => {
+  ElMessageBox.confirm('确定要删除该成果归档吗？', '提示', {
+    confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning'
+  }).then(async () => {
+    try {
+      await request.delete(`/archives/${row.id}`)
+      ElMessage.success('删除成功')
+      loadList()
+    } catch (e) { console.error('删除失败:', e) }
+  }).catch(() => {})
+}
+
+const handleResubmit = (row) => {
+  ElMessageBox.confirm('确定要重置该归档为待审核状态吗？', '重交确认', {
+    confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning'
+  }).then(async () => {
+    try {
+      await request.post(`/archives/${row.id}/resubmit`)
+      ElMessage.success('已重置，可重新提交')
+      loadList()
+    } catch (e) { console.error('重交失败:', e) }
+  }).catch(() => {})
+}
+
 const handleApprove = (row) => {
   currentRow = row
   reviewAction.value = 'archived'
-  reviewForm.comment = ''
+  reviewForm.return_reason = ''
   reviewVisible.value = true
 }
 
 const handleReject = (row) => {
   currentRow = row
-  reviewAction.value = 'rejected'
-  reviewForm.comment = ''
+  reviewAction.value = 'returned'
+  reviewForm.return_reason = ''
   reviewVisible.value = true
 }
 
 const submitReview = async () => {
-  if (reviewAction.value === 'rejected' && !reviewForm.comment.trim()) {
+  if (reviewAction.value === 'returned' && !reviewForm.return_reason.trim()) {
     ElMessage.warning('请填写退回原因')
     return
   }
@@ -337,7 +408,7 @@ const submitReview = async () => {
     reviewLoading.value = true
     await request.post(`/archives/${currentRow.id}/review`, {
       status: reviewAction.value,
-      comment: reviewForm.comment
+      return_reason: reviewForm.return_reason
     })
     ElMessage.success(reviewAction.value === 'archived' ? '审核通过' : '已退回')
     reviewVisible.value = false

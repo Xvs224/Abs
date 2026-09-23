@@ -28,6 +28,7 @@ class Proposal(Base):
     word_count = Column(Integer, default=0, comment="字数")
 
     # 附件
+    file_id = Column(Integer, ForeignKey("uploaded_files.id"), comment="上传文件ID")
     file_path = Column(String(255), default="", comment="开题报告文件路径")
     file_name = Column(String(255), default="", comment="文件名")
 

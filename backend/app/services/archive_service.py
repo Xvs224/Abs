@@ -9,17 +9,29 @@ from sqlalchemy.orm import Session
 from app.models.archive import Archive
 from app.models.topic import Topic
 from app.models.user import User
+from app.models.review import Defense
 from app.schemas.archive import ArchiveCreate, ArchiveUpdate, ArchiveReview, ArchiveResponse
 from app.core.exceptions import NotFoundException, BusinessException, ConflictException
 from app.schemas.common import PaginationParams
 
 
-def _enrich_archive(archive: Archive) -> dict:
-    """补充归档关联信息"""
+def _enrich_archive(archive: Archive, db: Session = None) -> dict:
+    """补充归档关联信息（含答辩成绩/等级）"""
     data = {c.name: getattr(archive, c.name) for c in archive.__table__.columns}
     data["topic_title"] = archive.topic.title if archive.topic else ""
     data["student_name"] = archive.student.real_name if archive.student else ""
     data["teacher_name"] = archive.teacher.real_name if archive.teacher else ""
+
+    # 从答辩记录中填充最终成绩与等级（若归档表未显式存储）
+    if db is not None and archive.topic_id:
+        defense = db.query(Defense).filter(Defense.topic_id == archive.topic_id).first()
+        if defense:
+            if not data.get("final_score"):
+                data["final_score"] = defense.total_score or 0
+            if not data.get("final_grade"):
+                data["final_grade"] = defense.grade or ""
+            data["defense_result"] = defense.result or ""
+
     return data
 
 
@@ -38,7 +50,7 @@ def get_archive_detail(db: Session, archive_id: int) -> ArchiveResponse:
     archive = get_archive_by_id(db, archive_id)
     if not archive:
         raise NotFoundException("归档不存在")
-    return ArchiveResponse(**_enrich_archive(archive))
+    return ArchiveResponse(**_enrich_archive(archive, db))
 
 
 def get_archive_list(
@@ -95,7 +107,7 @@ def get_archive_list(
     offset = (params.page - 1) * params.page_size
     archives = query.offset(offset).limit(params.page_size).all()
 
-    items = [ArchiveResponse(**_enrich_archive(a)) for a in archives]
+    items = [ArchiveResponse(**_enrich_archive(a, db)) for a in archives]
     return items, total
 
 
@@ -123,7 +135,7 @@ def create_archive(db: Session, data: ArchiveCreate, student_id: int) -> Archive
     db.add(archive)
     db.commit()
     db.refresh(archive)
-    return ArchiveResponse(**_enrich_archive(archive))
+    return ArchiveResponse(**_enrich_archive(archive, db))
 
 
 def update_archive(db: Session, archive_id: int, data: ArchiveUpdate, current_user: User) -> ArchiveResponse:
@@ -145,7 +157,7 @@ def update_archive(db: Session, archive_id: int, data: ArchiveUpdate, current_us
 
     db.commit()
     db.refresh(archive)
-    return ArchiveResponse(**_enrich_archive(archive))
+    return ArchiveResponse(**_enrich_archive(archive, db))
 
 
 def review_archive(db: Session, archive_id: int, data: ArchiveReview, archivist_id: int) -> ArchiveResponse:
@@ -171,7 +183,7 @@ def review_archive(db: Session, archive_id: int, data: ArchiveReview, archivist_
 
     db.commit()
     db.refresh(archive)
-    return ArchiveResponse(**_enrich_archive(archive))
+    return ArchiveResponse(**_enrich_archive(archive, db))
 
 
 def delete_archive(db: Session, archive_id: int, current_user: User) -> None:
@@ -189,3 +201,24 @@ def delete_archive(db: Session, archive_id: int, current_user: User) -> None:
 
     db.delete(archive)
     db.commit()
+
+
+def resubmit_archive(db: Session, archive_id: int, current_user: User) -> ArchiveResponse:
+    """重交归档（管理员可强制重置为待审核，学生仅能重交被退回的）"""
+    archive = get_archive_by_id(db, archive_id)
+    if not archive:
+        raise NotFoundException("归档不存在")
+
+    if current_user.role == "student":
+        if archive.student_id != current_user.id:
+            raise BusinessException(403, "无权操作他人的归档")
+        if archive.status != "returned":
+            raise BusinessException(400, "只有被退回的归档才能重交")
+
+    # 重置为待审核状态
+    archive.status = "pending"
+    archive.return_reason = ""
+    archive.archive_time = None
+    db.commit()
+    db.refresh(archive)
+    return ArchiveResponse(**_enrich_archive(archive, db))

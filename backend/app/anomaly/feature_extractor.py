@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 from app.models.user import User
 from app.models.topic import Topic
 from app.models.proposal import Proposal
-from app.models.guidance import GuidancePlan, GuidanceRecord
 from app.models.midterm import MidtermCheck, Rectification
 from app.models.thesis import ThesisVersion, FormatCheck
 from app.models.review import Review, Defense
@@ -31,10 +30,6 @@ class FeatureExtractor:
     def __init__(self) -> None:
         """初始化特征提取器"""
         self.feature_names: List[str] = [
-            "guidance_count",
-            "avg_guidance_interval_days",
-            "avg_guidance_duration",
-            "guidance_completion_rate",
             "progress_percentage",
             "midterm_score",
             "rectification_count",
@@ -79,10 +74,6 @@ class FeatureExtractor:
             topic_features = self.extract_topic_features(db, topic.id)
             features.update(topic_features)
 
-            # 指导特征
-            guidance_features = self.extract_guidance_features(db, topic.id)
-            features.update(guidance_features)
-
             # 中期特征
             midterm = db.query(MidtermCheck).filter(
                 MidtermCheck.topic_id == topic.id
@@ -108,10 +99,6 @@ class FeatureExtractor:
             features.update({
                 "topic_difficulty": 0,
                 "topic_workload": 0,
-                "guidance_count": 0,
-                "avg_guidance_interval_days": 0.0,
-                "avg_guidance_duration": 0.0,
-                "guidance_completion_rate": 0.0,
                 "progress_percentage": 0.0,
                 "midterm_score": 0.0,
                 "rectification_count": 0,
@@ -198,70 +185,6 @@ class FeatureExtractor:
             "proposal_status": proposal.status,
             "topic_id": proposal.topic_id,
             "student_id": proposal.student_id,
-        }
-
-        return features
-
-    # ------------------------------------------------------------------
-    # 指导特征
-    # ------------------------------------------------------------------
-    def extract_guidance_features(self, db: Session, topic_id: int) -> Dict[str, Any]:
-        """提取指导特征
-
-        包含指导次数、平均间隔天数、平均时长、完成率等。
-
-        Args:
-            db: 数据库会话
-            topic_id: 选题ID
-
-        Returns:
-            指导特征字典
-        """
-        records = db.query(GuidanceRecord).filter(
-            GuidanceRecord.topic_id == topic_id
-        ).order_by(GuidanceRecord.record_time.asc()).all()
-
-        plan = db.query(GuidancePlan).filter(
-            GuidancePlan.topic_id == topic_id
-        ).first()
-
-        guidance_count = len(records)
-        total_times = plan.total_times if plan else 12
-        completion_rate = min(guidance_count / max(total_times, 1), 1.0)
-
-        # 计算指导间隔天数
-        avg_interval_days = 0.0
-        if guidance_count >= 2:
-            intervals: List[float] = []
-            for i in range(1, guidance_count):
-                if records[i].record_time and records[i - 1].record_time:
-                    delta = records[i].record_time - records[i - 1].record_time
-                    intervals.append(delta.total_seconds() / 86400.0)
-            if intervals:
-                avg_interval_days = statistics.mean(intervals)
-
-        # 平均指导时长
-        durations = [r.duration for r in records if r.duration and r.duration > 0]
-        avg_duration = statistics.mean(durations) if durations else 0.0
-
-        # 指导方式分布
-        method_counts: Dict[str, int] = {}
-        for r in records:
-            method_counts[r.method] = method_counts.get(r.method, 0) + 1
-
-        # 指导类型分布
-        type_counts: Dict[str, int] = {}
-        for r in records:
-            type_counts[r.record_type] = type_counts.get(r.record_type, 0) + 1
-
-        features: Dict[str, Any] = {
-            "guidance_count": guidance_count,
-            "avg_guidance_interval_days": round(avg_interval_days, 2),
-            "avg_guidance_duration": round(avg_duration, 2),
-            "guidance_completion_rate": round(completion_rate, 4),
-            "guidance_plan_total": total_times,
-            "guidance_method_distribution": method_counts,
-            "guidance_type_distribution": type_counts,
         }
 
         return features
@@ -492,7 +415,6 @@ class FeatureExtractor:
             "student": self.extract_student_features,
             "topic": self.extract_topic_features,
             "proposal": self.extract_proposal_features,
-            "guidance": self.extract_guidance_features,
             "midterm": self.extract_midterm_features,
             "thesis": self.extract_thesis_features,
             "review": self.extract_review_features,
@@ -522,10 +444,6 @@ class FeatureExtractor:
         """
         if feature_keys is None:
             feature_keys = [
-                "guidance_count",
-                "avg_guidance_interval_days",
-                "avg_guidance_duration",
-                "guidance_completion_rate",
                 "progress_percentage",
                 "midterm_score",
                 "rectification_count",

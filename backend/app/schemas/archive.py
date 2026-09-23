@@ -53,6 +53,7 @@ class ArchiveResponse(ArchiveBase):
     other_materials: str = ""
     final_score: int = 0
     final_grade: str = ""
+    defense_result: Optional[str] = ""
     archivist_id: Optional[int] = None
     status: str
     return_reason: str = ""

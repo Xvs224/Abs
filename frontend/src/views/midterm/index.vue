@@ -4,12 +4,15 @@
     <el-card class="search-card" shadow="never">
       <el-form :inline="true" :model="searchForm" class="search-form">
         <el-form-item label="状态">
-          <el-select v-model="searchForm.status" placeholder="全部状态" clearable style="width: 140px">
-            <el-option label="待提交" value="draft" />
-            <el-option label="待评审" value="pending" />
+          <el-select v-model="searchForm.status" placeholder="全部状态" clearable style="width: 150px">
+            <el-option label="草稿" value="draft" />
+            <el-option label="待指导" value="form_submitted" />
+            <el-option label="已指导" value="guided" />
+            <el-option label="待评审" value="ppt_submitted" />
             <el-option label="已通过" value="passed" />
-            <el-option label="需整改" value="rectification" />
-            <el-option label="已完成" value="completed" />
+            <el-option label="需整改" value="rectifying" />
+            <el-option label="未通过" value="failed" />
+            <el-option label="整改完成" value="rectified" />
           </el-select>
         </el-form-item>
         <el-form-item label="关键词">
@@ -32,69 +35,43 @@
     <el-card class="table-card" shadow="never">
       <div class="table-toolbar">
         <div class="toolbar-left">
-          <el-button type="primary" :icon="Plus" @click="handleAdd">新增中期检查</el-button>
           <el-button :icon="RefreshRight" @click="loadList">刷新</el-button>
         </div>
       </div>
 
-      <el-table
-        :data="tableData"
-        v-loading="loading"
-        stripe
-        border
-        style="width: 100%"
-      >
+      <el-table :data="tableData" v-loading="loading" stripe border style="width: 100%">
         <el-table-column type="index" label="序号" width="60" align="center" />
-        <el-table-column prop="title" label="论文题目" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="topic_title" label="论文题目" min-width="180" show-overflow-tooltip />
         <el-table-column prop="student_name" label="学生" width="100" />
-        <el-table-column prop="teacher_name" label="指导教师" width="100" />
-        <el-table-column prop="progress" label="完成进度" width="140">
+        <el-table-column prop="progress_percentage" label="进度" width="120">
           <template #default="{ row }">
-            <el-progress :percentage="row.progress || 0" :status="row.progress >= 80 ? 'success' : row.progress >= 50 ? '' : 'warning'" />
+            <el-progress :percentage="row.progress_percentage || 0" :status="row.progress_percentage >= 80 ? 'success' : row.progress_percentage >= 50 ? '' : 'warning'" />
+          </template>
+        </el-table-column>
+        <el-table-column prop="stage" label="阶段" width="90" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.stage === 'ppt' ? 'success' : 'primary'" size="small">
+              {{ row.stage === 'ppt' ? 'PPT' : '检查表' }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="110" align="center">
           <template #default="{ row }">
-            <el-tag :type="statusTagType(row.status)" size="small">
-              {{ statusLabel(row.status) }}
-            </el-tag>
+            <el-tag :type="statusTagType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="submitted_at" label="提交时间" width="160">
-          <template #default="{ row }">
-            {{ formatTime(row.submitted_at) }}
-          </template>
+        <el-table-column prop="submit_time" label="提交时间" width="160">
+          <template #default="{ row }">{{ formatTime(row.submit_time) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="260" fixed="right" align="center">
+        <el-table-column label="操作" width="240" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button type="primary" link size="small" @click="handleView(row)">查看详情</el-button>
-            <el-button
-              v-if="row.status === 'draft' || row.status === 'rectification'"
-              type="success"
-              link
-              size="small"
-              @click="handleEdit(row)"
-            >
-              编辑
-            </el-button>
-            <el-button
-              v-if="row.status === 'pending'"
-              type="warning"
-              link
-              size="small"
-              @click="handleReview(row)"
-            >
-              评审
-            </el-button>
-            <el-button
-              v-if="row.status === 'rectification'"
-              type="danger"
-              link
-              size="small"
-              @click="handleRectification(row)"
-            >
-              整改记录
-            </el-button>
+            <el-button type="primary" link size="small" @click="handleView(row)">详情</el-button>
+            <el-button v-if="row.status === 'form_submitted' && isTeacher" type="warning" link size="small" @click="handleGuidance(row)">指导</el-button>
+            <el-button v-if="(row.status === 'ppt_submitted' || row.status === 'rectified') && isTeacher" type="success" link size="small" @click="handleReview(row)">评审</el-button>
+            <el-button v-if="row.status === 'rectifying' && isTeacher" type="danger" link size="small" @click="handleRectification(row)">整改</el-button>
+            <!-- 管理员可删除/重交 -->
+            <el-button v-if="isAdmin" type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+            <el-button v-if="isAdmin" type="warning" link size="small" @click="handleResubmit(row)">重交</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -114,288 +91,230 @@
     </el-card>
 
     <!-- 详情对话框 -->
-    <el-dialog
-      v-model="detailVisible"
-      title="中期检查详情"
-      width="700px"
-    >
+    <el-dialog v-model="detailVisible" title="中期检查详情" width="750px" top="5vh">
       <div v-loading="detailLoading" class="midterm-detail">
         <template v-if="currentDetail">
           <el-descriptions :column="2" border>
-            <el-descriptions-item label="论文题目" :span="2">{{ currentDetail.title }}</el-descriptions-item>
+            <el-descriptions-item label="论文题目" :span="2">{{ currentDetail.topic_title || '-' }}</el-descriptions-item>
             <el-descriptions-item label="学生">{{ currentDetail.student_name || '-' }}</el-descriptions-item>
             <el-descriptions-item label="指导教师">{{ currentDetail.teacher_name || '-' }}</el-descriptions-item>
             <el-descriptions-item label="完成进度">
-              <el-progress :percentage="currentDetail.progress || 0" />
+              <el-progress :percentage="currentDetail.progress_percentage || 0" />
             </el-descriptions-item>
             <el-descriptions-item label="状态">
-              <el-tag :type="statusTagType(currentDetail.status)" size="small">
-                {{ statusLabel(currentDetail.status) }}
-              </el-tag>
+              <el-tag :type="statusTagType(currentDetail.status)" size="small">{{ statusLabel(currentDetail.status) }}</el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="提交时间" :span="2">{{ formatTime(currentDetail.submitted_at) }}</el-descriptions-item>
+            <el-descriptions-item label="中期检查表" :span="2">
+              <template v-if="currentDetail.file_name">
+                <el-button type="primary" link @click="handleDownload(currentDetail.file_id)">
+                  <el-icon><Document /></el-icon> {{ currentDetail.file_name }}
+                </el-button>
+              </template>
+              <span v-else style="color:#909399">未上传</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="演示文稿(PPT)" :span="2">
+              <template v-if="currentDetail.ppt_file_name">
+                <el-button type="primary" link @click="handleDownload(currentDetail.ppt_file_id)">
+                  <el-icon><Document /></el-icon> {{ currentDetail.ppt_file_name }}
+                </el-button>
+              </template>
+              <span v-else style="color:#909399">未上传</span>
+            </el-descriptions-item>
           </el-descriptions>
 
+          <div class="detail-section">
+            <div class="section-title">进度描述</div>
+            <div class="section-content">{{ currentDetail.progress_description || '-' }}</div>
+          </div>
           <div class="detail-section">
             <div class="section-title">已完成工作</div>
             <div class="section-content">{{ currentDetail.completed_work || '-' }}</div>
           </div>
-
+          <div class="detail-section">
+            <div class="section-title">剩余工作</div>
+            <div class="section-content">{{ currentDetail.remaining_work || '-' }}</div>
+          </div>
           <div class="detail-section">
             <div class="section-title">存在问题</div>
-            <div class="section-content problem">{{ currentDetail.problems || '-' }}</div>
+            <div class="section-content problem">{{ currentDetail.existing_problems || '-' }}</div>
           </div>
-
           <div class="detail-section">
             <div class="section-title">后续计划</div>
             <div class="section-content">{{ currentDetail.next_plan || '-' }}</div>
           </div>
-
-          <div class="detail-section" v-if="currentDetail.review_comment">
-            <div class="section-title">评审意见</div>
-            <div class="section-content review">{{ currentDetail.review_comment }}</div>
+          <div class="detail-section" v-if="currentDetail.teacher_guidance">
+            <div class="section-title">教师指导意见</div>
+            <div class="section-content guidance">{{ currentDetail.teacher_guidance }}</div>
+          </div>
+          <div class="detail-section" v-if="currentDetail.teacher_opinion">
+            <div class="section-title">教师评审意见</div>
+            <div class="section-content review">{{ currentDetail.teacher_opinion }}</div>
           </div>
         </template>
       </div>
     </el-dialog>
 
-    <!-- 新增/编辑对话框 -->
-    <el-dialog
-      v-model="dialogVisible"
-      :title="dialogTitle"
-      width="600px"
-      :close-on-click-modal="false"
-    >
-      <el-form
-        ref="formRef"
-        :model="formData"
-        :rules="formRules"
-        label-width="100px"
-        class="midterm-form"
-      >
-        <el-form-item label="论文题目" prop="title">
-          <el-input v-model="formData.title" placeholder="请输入论文题目" />
-        </el-form-item>
-        <el-form-item label="完成进度" prop="progress">
-          <el-slider v-model="formData.progress" :min="0" :max="100" show-input />
-        </el-form-item>
-        <el-form-item label="已完成工作" prop="completed_work">
-          <el-input
-            v-model="formData.completed_work"
-            type="textarea"
-            :rows="4"
-            placeholder="请描述已完成的工作内容"
-          />
-        </el-form-item>
-        <el-form-item label="存在问题" prop="problems">
-          <el-input
-            v-model="formData.problems"
-            type="textarea"
-            :rows="3"
-            placeholder="请描述存在的问题与困难"
-          />
-        </el-form-item>
-        <el-form-item label="后续计划" prop="next_plan">
-          <el-input
-            v-model="formData.next_plan"
-            type="textarea"
-            :rows="3"
-            placeholder="请描述后续研究计划"
-          />
+    <!-- 指导对话框 -->
+    <el-dialog v-model="guidanceVisible" title="教师指导" width="500px" :close-on-click-modal="false">
+      <el-form :model="guidanceForm" label-width="100px">
+        <el-form-item label="指导意见" required>
+          <el-input v-model="guidanceForm.teacher_guidance" type="textarea" :rows="6" placeholder="请输入对学生中期进展的指导意见..." />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button :loading="dialogLoading" @click="handleSaveDraft">保存草稿</el-button>
-        <el-button type="primary" :loading="dialogLoading" @click="handleSubmit">提交评审</el-button>
+        <el-button @click="guidanceVisible = false">取消</el-button>
+        <el-button type="primary" :loading="guidanceLoading" v-if='isTeacher' @click="submitGuidance">确认指导</el-button>
       </template>
     </el-dialog>
 
     <!-- 评审对话框 -->
-    <el-dialog
-      v-model="reviewVisible"
-      title="中期评审"
-      width="500px"
-      :close-on-click-modal="false"
-    >
-      <el-form :model="reviewForm" label-width="80px">
-        <el-form-item label="评审结果" prop="result">
-          <el-radio-group v-model="reviewForm.result">
+    <el-dialog v-model="reviewVisible" title="中期评审" width="500px" :close-on-click-modal="false">
+      <el-form :model="reviewForm" label-width="100px">
+        <el-form-item label="评审结果" prop="status">
+          <el-radio-group v-model="reviewForm.status">
             <el-radio value="passed">通过</el-radio>
-            <el-radio value="rectification">需整改</el-radio>
+            <el-radio value="rectifying">需整改</el-radio>
             <el-radio value="failed">不通过</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="评审意见" prop="comment">
-          <el-input
-            v-model="reviewForm.comment"
-            type="textarea"
-            :rows="4"
-            placeholder="请输入评审意见"
-          />
+        <el-form-item label="教师评分">
+          <el-input-number v-model="reviewForm.teacher_score" :min="0" :max="100" :precision="1" />
+        </el-form-item>
+        <el-form-item label="评审意见">
+          <el-input v-model="reviewForm.teacher_opinion" type="textarea" :rows="4" placeholder="请输入评审意见" />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="reviewVisible = false">取消</el-button>
-        <el-button type="primary" :loading="reviewLoading" @click="submitReview">确认评审</el-button>
+        <el-button type="primary" :loading="reviewLoading" v-if='isTeacher' @click="submitReview">确认评审</el-button>
       </template>
     </el-dialog>
 
     <!-- 整改记录对话框 -->
-    <el-dialog
-      v-model="rectificationVisible"
-      title="整改记录管理"
-      width="650px"
-    >
+    <el-dialog v-model="rectificationVisible" title="整改记录管理" width="700px">
       <div class="rectification-container">
         <div class="rect-header">
           <span class="rect-title">整改记录列表</span>
-          <el-button type="primary" size="small" :icon="Plus" @click="showAddRectification = true">
-            新增整改
-          </el-button>
+          <el-button type="primary" size="small" :icon="Plus" v-if='isTeacher' @click="showAddRectification = true">新增整改要求</el-button>
         </div>
         <el-table :data="rectificationList" v-loading="rectLoading" border size="small">
-          <el-table-column prop="content" label="整改内容" min-width="200" show-overflow-tooltip />
+          <el-table-column prop="problem_description" label="问题描述" min-width="150" show-overflow-tooltip />
+          <el-table-column prop="requirement" label="整改要求" min-width="150" show-overflow-tooltip />
+          <el-table-column prop="deadline" label="截止日期" width="120">
+            <template #default="{ row }">{{ row.deadline ? dayjs(row.deadline).format('YYYY-MM-DD') : '-' }}</template>
+          </el-table-column>
           <el-table-column prop="status" label="状态" width="100" align="center">
             <template #default="{ row }">
-              <el-tag :type="row.status === 'completed' ? 'success' : 'warning'" size="small">
-                {{ row.status === 'completed' ? '已完成' : '整改中' }}
-              </el-tag>
+              <el-tag :type="rectStatusType(row.status)" size="small">{{ rectStatusText(row.status) }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="created_at" label="创建时间" width="150">
+          <el-table-column label="操作" width="100" align="center">
             <template #default="{ row }">
-              {{ formatTime(row.created_at) }}
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="120" align="center">
-            <template #default="{ row }">
-              <el-button
-                v-if="row.status !== 'completed'"
-                type="success"
-                link
-                size="small"
-                @click="handleRecheck(row)"
-              >
-                复检
-              </el-button>
+              <el-button v-if="row.status === 'submitted' && isTeacher" type="success" link size="small" @click="handleRecheck(row)">复检</el-button>
             </template>
           </el-table-column>
         </el-table>
       </div>
 
-      <!-- 新增整改表单 -->
       <el-divider v-if="showAddRectification" />
       <div v-if="showAddRectification" class="add-rectification">
-        <el-form :model="rectForm" label-width="80px">
-          <el-form-item label="整改内容">
-            <el-input
-              v-model="rectForm.content"
-              type="textarea"
-              :rows="3"
-              placeholder="请输入整改内容"
-            />
+        <el-form :model="rectForm" label-width="100px">
+          <el-form-item label="问题描述">
+            <el-input v-model="rectForm.problem_description" type="textarea" :rows="3" placeholder="请输入问题描述" />
+          </el-form-item>
+          <el-form-item label="整改要求">
+            <el-input v-model="rectForm.requirement" type="textarea" :rows="3" placeholder="请输入整改要求" />
+          </el-form-item>
+          <el-form-item label="截止日期">
+            <el-date-picker v-model="rectForm.deadline" type="date" placeholder="选择截止日期" format="YYYY-MM-DD" value-format="YYYY-MM-DD" />
           </el-form-item>
           <el-form-item>
-            <el-button type="primary" :loading="rectSubmitting" size="small" @click="submitRectification">
-              提交整改
-            </el-button>
-            <el-button size="small" @click="showAddRectification = false">取消</el-button>
+            <el-button type="primary" :loading="rectSubmitting" size="small" @click="submitRectification">提交</el-button>
+            <el-button size="small" v-if='isTeacher' @click="showAddRectification = false">取消</el-button>
           </el-form-item>
         </el-form>
       </div>
+
+      <el-dialog v-model="recheckVisible" title="整改复检" width="450px" append-to-body>
+        <el-form :model="recheckForm" label-width="80px">
+          <el-form-item label="整改内容">
+            <div class="rect-content-display">{{ currentRectification?.rectification_content || '-' }}</div>
+          </el-form-item>
+          <el-form-item label="复检结果">
+            <el-radio-group v-model="recheckForm.review_result">
+              <el-radio value="passed">通过</el-radio>
+              <el-radio value="failed">不通过</el-radio>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item label="复检意见">
+            <el-input v-model="recheckForm.review_opinion" type="textarea" :rows="3" placeholder="请输入复检意见" />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="recheckVisible = false">取消</el-button>
+          <el-button type="primary" :loading="recheckLoading" v-if='isTeacher' @click="submitRecheck">确认复检</el-button>
+        </template>
+      </el-dialog>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
+import { useUserStore } from '@/store/user' 
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Refresh, Plus, RefreshRight } from '@element-plus/icons-vue'
+import { Search, Refresh, Plus, RefreshRight, Document } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import dayjs from 'dayjs'
 
+
+const userStore = useUserStore()
+const isTeacher = computed(() => userStore.userInfo?.role === 'teacher')
+const isAdmin = computed(() => userStore.userInfo?.role === 'admin')
+
 const loading = ref(false)
 const detailLoading = ref(false)
-const dialogVisible = ref(false)
-const dialogLoading = ref(false)
 const detailVisible = ref(false)
+const guidanceVisible = ref(false)
+const guidanceLoading = ref(false)
 const reviewVisible = ref(false)
 const reviewLoading = ref(false)
 const rectificationVisible = ref(false)
 const rectLoading = ref(false)
 const rectSubmitting = ref(false)
-const formRef = ref(null)
-const isEdit = ref(false)
+const showAddRectification = ref(false)
+const recheckVisible = ref(false)
+const recheckLoading = ref(false)
+
 const currentRow = ref(null)
 const currentDetail = ref(null)
-const showAddRectification = ref(false)
+const currentRectification = ref(null)
 
 const tableData = ref([])
-const pagination = reactive({
-  page: 1,
-  page_size: 10,
-  total: 0
-})
+const pagination = reactive({ page: 1, page_size: 10, total: 0 })
+const searchForm = reactive({ status: '', keyword: '' })
 
-const searchForm = reactive({
-  status: '',
-  keyword: ''
-})
-
-const formData = reactive({
-  id: null,
-  title: '',
-  progress: 50,
-  completed_work: '',
-  problems: '',
-  next_plan: ''
-})
-
-const reviewForm = reactive({
-  result: 'passed',
-  comment: ''
-})
-
+const guidanceForm = reactive({ teacher_guidance: '' })
+const reviewForm = reactive({ status: 'passed', teacher_opinion: '', teacher_score: null })
 const rectificationList = ref([])
-const rectForm = reactive({
-  content: ''
-})
+const rectForm = reactive({ problem_description: '', requirement: '', deadline: null })
+const recheckForm = reactive({ review_result: 'passed', review_opinion: '' })
 
-const formRules = {
-  title: [{ required: true, message: '请输入论文题目', trigger: 'blur' }],
-  progress: [{ required: true, message: '请设置完成进度', trigger: 'change' }],
-  completed_work: [{ required: true, message: '请输入已完成工作', trigger: 'blur' }],
-  next_plan: [{ required: true, message: '请输入后续计划', trigger: 'blur' }]
-}
+const statusLabel = (s) => ({
+  draft: '草稿', form_submitted: '待指导', guided: '已指导',
+  ppt_submitted: '待评审', passed: '已通过', rectifying: '需整改',
+  failed: '未通过', rectified: '整改完成'
+})[s] || s
 
-const dialogTitle = computed(() => isEdit.value ? '编辑中期检查' : '新增中期检查')
+const statusTagType = (s) => ({
+  draft: 'info', form_submitted: 'warning', guided: 'primary',
+  ppt_submitted: 'warning', passed: 'success', rectifying: 'danger',
+  failed: 'danger', rectified: 'success'
+})[s] || 'info'
 
-const statusLabel = (status) => {
-  const map = {
-    draft: '待提交',
-    pending: '待评审',
-    passed: '已通过',
-    rectification: '需整改',
-    failed: '未通过',
-    completed: '已完成'
-  }
-  return map[status] || status
-}
-
-const statusTagType = (status) => {
-  const map = {
-    draft: 'info',
-    pending: 'warning',
-    passed: 'success',
-    rectification: 'danger',
-    failed: 'danger',
-    completed: 'success'
-  }
-  return map[status] || 'info'
-}
-
-const formatTime = (time) => time ? dayjs(time).format('YYYY-MM-DD HH:mm') : '-'
+const rectStatusText = (s) => ({ pending: '待整改', submitted: '已提交', passed: '已通过', failed: '未通过' })[s] || s
+const rectStatusType = (s) => ({ pending: 'warning', submitted: '', passed: 'success', failed: 'danger' })[s] || 'info'
+const formatTime = (t) => t ? dayjs(t).format('YYYY-MM-DD HH:mm') : '-'
 
 const loadList = async () => {
   loading.value = true
@@ -408,56 +327,12 @@ const loadList = async () => {
     })
     tableData.value = res.items || res.data || []
     pagination.total = res.total || 0
-  } catch (error) {
-    console.error('加载中期检查列表失败:', error)
-  } finally {
-    loading.value = false
-  }
+  } catch (e) { console.error('加载列表失败:', e) }
+  finally { loading.value = false }
 }
 
-const handleSearch = () => {
-  pagination.page = 1
-  loadList()
-}
-
-const handleReset = () => {
-  searchForm.status = ''
-  searchForm.keyword = ''
-  pagination.page = 1
-  loadList()
-}
-
-const resetForm = () => {
-  formData.id = null
-  formData.title = ''
-  formData.progress = 50
-  formData.completed_work = ''
-  formData.problems = ''
-  formData.next_plan = ''
-  formRef.value?.resetFields()
-}
-
-const handleAdd = () => {
-  isEdit.value = false
-  resetForm()
-  dialogVisible.value = true
-}
-
-const handleEdit = async (row) => {
-  isEdit.value = true
-  try {
-    const res = await request.get(`/midterm/${row.id}`)
-    formData.id = res.id
-    formData.title = res.title
-    formData.progress = res.progress || 50
-    formData.completed_work = res.completed_work
-    formData.problems = res.problems
-    formData.next_plan = res.next_plan
-    dialogVisible.value = true
-  } catch (error) {
-    console.error('获取详情失败:', error)
-  }
-}
+const handleSearch = () => { pagination.page = 1; loadList() }
+const handleReset = () => { searchForm.status = ''; searchForm.keyword = ''; pagination.page = 1; loadList() }
 
 const handleView = async (row) => {
   detailVisible.value = true
@@ -466,74 +341,91 @@ const handleView = async (row) => {
   try {
     const res = await request.get(`/midterm/${row.id}`)
     currentDetail.value = res
-  } catch (error) {
-    console.error('获取详情失败:', error)
-  } finally {
-    detailLoading.value = false
-  }
+  } catch (e) { console.error('获取详情失败:', e) }
+  finally { detailLoading.value = false }
 }
 
-const handleSaveDraft = async () => {
-  try {
-    dialogLoading.value = true
-    const data = { ...formData, status: 'draft' }
-    if (isEdit.value) {
-      await request.put(`/midterm/${formData.id}`, data)
-    } else {
-      await request.post('/midterm', data)
-    }
-    ElMessage.success('保存成功')
-    dialogVisible.value = false
-    loadList()
-  } catch (error) {
-    console.error('保存失败:', error)
-  } finally {
-    dialogLoading.value = false
-  }
+const handleDelete = (row) => {
+  ElMessageBox.confirm('确定要删除该中期检查记录吗？', '提示', {
+    confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning'
+  }).then(async () => {
+    try {
+      await request.delete(`/midterm/${row.id}`)
+      ElMessage.success('删除成功')
+      loadList()
+    } catch (e) { console.error('删除失败:', e) }
+  }).catch(() => {})
 }
 
-const handleSubmit = async () => {
-  if (!formRef.value) return
-  try {
-    await formRef.value.validate()
-    dialogLoading.value = true
-    const data = { ...formData, status: 'pending' }
-    if (isEdit.value) {
-      await request.put(`/midterm/${formData.id}`, data)
-    } else {
-      await request.post('/midterm', data)
-    }
-    ElMessage.success('提交成功')
-    dialogVisible.value = false
-    loadList()
-  } catch (error) {
-    if (error !== false) {
-      console.error('提交失败:', error)
-    }
-  } finally {
-    dialogLoading.value = false
+const handleResubmit = (row) => {
+  ElMessageBox.confirm('确定要重置该中期检查为草稿状态吗？', '重交确认', {
+    confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning'
+  }).then(async () => {
+    try {
+      await request.post(`/midterm/${row.id}/resubmit`)
+      ElMessage.success('已重置为草稿，可重新提交')
+      loadList()
+    } catch (e) { console.error('重交失败:', e) }
+  }).catch(() => {})
+}
+
+const handleGuidance = (row) => {
+  currentRow.value = row
+  guidanceForm.teacher_guidance = ''
+  guidanceVisible.value = true
+}
+
+const submitGuidance = async () => {
+  if (!guidanceForm.teacher_guidance.trim()) {
+    ElMessage.warning('请输入指导意见')
+    return
   }
+  try {
+    guidanceLoading.value = true
+    await request.post(`/midterm/${currentRow.value.id}/guidance`, {
+      teacher_guidance: guidanceForm.teacher_guidance
+    })
+    ElMessage.success('指导意见已提交')
+    guidanceVisible.value = false
+    loadList()
+  } catch (e) { console.error('指导失败:', e) }
+  finally { guidanceLoading.value = false }
 }
 
 const handleReview = (row) => {
   currentRow.value = row
-  reviewForm.result = 'passed'
-  reviewForm.comment = ''
+  reviewForm.status = 'passed'
+  reviewForm.teacher_opinion = ''
+  reviewForm.teacher_score = null
   reviewVisible.value = true
 }
 
 const submitReview = async () => {
   try {
     reviewLoading.value = true
-    await request.post(`/midterm/${currentRow.value.id}/review`, reviewForm)
+    await request.post(`/midterm/${currentRow.value.id}/review`, {
+      status: reviewForm.status,
+      teacher_opinion: reviewForm.teacher_opinion,
+      teacher_score: reviewForm.teacher_score
+    })
     ElMessage.success('评审成功')
     reviewVisible.value = false
     loadList()
-  } catch (error) {
-    console.error('评审失败:', error)
-  } finally {
-    reviewLoading.value = false
-  }
+  } catch (e) { console.error('评审失败:', e) }
+  finally { reviewLoading.value = false }
+}
+
+const handleDownload = async (fileId) => {
+  if (!fileId) return
+  try {
+    const response = await request.download(`/files/${fileId}/download`)
+    const blob = response.data || response
+    const url = window.URL.createObjectURL(new Blob([blob]))
+    const link = document.createElement('a')
+    link.href = url
+    link.click()
+    window.URL.revokeObjectURL(url)
+  } catch (e) { console.error('下载失败:', e) }
 }
 
 const handleRectification = async (row) => {
@@ -541,135 +433,92 @@ const handleRectification = async (row) => {
   rectificationVisible.value = true
   rectLoading.value = true
   showAddRectification.value = false
+  await loadRectifications(row.id)
+}
+
+const loadRectifications = async (midtermId) => {
   try {
-    const res = await request.get(`/midterm/${row.id}/rectifications`)
+    const res = await request.get('/midterm/rectifications', { midterm_id: midtermId })
     rectificationList.value = res.items || res.data || []
-  } catch (error) {
-    console.error('加载整改记录失败:', error)
-  } finally {
-    rectLoading.value = false
-  }
+  } catch (e) { console.error('加载整改记录失败:', e) }
+  finally { rectLoading.value = false }
 }
 
 const submitRectification = async () => {
-  if (!rectForm.content.trim()) {
-    ElMessage.warning('请输入整改内容')
+  if (!rectForm.problem_description.trim()) {
+    ElMessage.warning('请输入问题描述')
     return
   }
   try {
     rectSubmitting.value = true
-    await request.post(`/midterm/${currentRow.value.id}/rectifications`, rectForm)
-    ElMessage.success('提交成功')
-    rectForm.content = ''
+    await request.post('/midterm/rectifications', {
+      midterm_id: currentRow.value.id,
+      topic_id: currentRow.value.topic_id,
+      problem_description: rectForm.problem_description,
+      requirement: rectForm.requirement,
+      deadline: rectForm.deadline
+    })
+    ElMessage.success('整改要求已创建')
+    rectForm.problem_description = ''
+    rectForm.requirement = ''
+    rectForm.deadline = null
     showAddRectification.value = false
-    // 刷新整改列表
-    const res = await request.get(`/midterm/${currentRow.value.id}/rectifications`)
-    rectificationList.value = res.items || res.data || []
-  } catch (error) {
-    console.error('提交失败:', error)
-  } finally {
-    rectSubmitting.value = false
-  }
+    await loadRectifications(currentRow.value.id)
+  } catch (e) { console.error('创建整改失败:', e) }
+  finally { rectSubmitting.value = false }
 }
 
 const handleRecheck = (row) => {
-  ElMessageBox.confirm('确认该整改项已完成并通过复检？', '复检确认', {
-    confirmButtonText: '确认通过',
-    cancelButtonText: '取消',
-    type: 'success'
-  }).then(async () => {
-    try {
-      await request.put(`/midterm/rectifications/${row.id}/recheck`, { status: 'completed' })
-      ElMessage.success('复检通过')
-      const res = await request.get(`/midterm/${currentRow.value.id}/rectifications`)
-      rectificationList.value = res.items || res.data || []
-    } catch (error) {
-      console.error('复检失败:', error)
-    }
-  }).catch(() => {})
+  currentRectification.value = row
+  recheckForm.review_result = 'passed'
+  recheckForm.review_opinion = ''
+  recheckVisible.value = true
 }
 
-onMounted(() => {
-  loadList()
-})
+const submitRecheck = async () => {
+  try {
+    recheckLoading.value = true
+    await request.post(`/midterm/rectifications/${currentRectification.value.id}/review`, {
+      review_opinion: recheckForm.review_opinion,
+      review_result: recheckForm.review_result
+    })
+    ElMessage.success(recheckForm.review_result === 'passed' ? '复检通过' : '复检不通过')
+    recheckVisible.value = false
+    await loadRectifications(currentRow.value.id)
+  } catch (e) { console.error('复检失败:', e) }
+  finally { recheckLoading.value = false }
+}
+
+onMounted(loadList)
 </script>
 
 <style scoped lang="scss">
 .midterm-page {
-  .search-card {
-    margin-bottom: 16px;
-  }
-
+  .search-card { margin-bottom: 16px; }
   .table-card {
-    .table-toolbar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 16px;
-    }
-
-    .pagination-wrapper {
-      display: flex;
-      justify-content: flex-end;
-      margin-top: 20px;
-    }
+    .table-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .pagination-wrapper { display: flex; justify-content: flex-end; margin-top: 20px; }
   }
-
-  .midterm-form {
-    padding-right: 20px;
-  }
-
   .midterm-detail {
     .detail-section {
       margin-top: 16px;
-
       .section-title {
-        font-size: 14px;
-        font-weight: 600;
-        color: #303133;
-        margin-bottom: 8px;
-        padding-left: 8px;
-        border-left: 3px solid #409eff;
+        font-size: 14px; font-weight: 600; color: #303133;
+        margin-bottom: 8px; padding-left: 8px; border-left: 3px solid #409eff;
       }
-
       .section-content {
-        background: #f5f7fa;
-        padding: 12px 16px;
-        border-radius: 4px;
-        line-height: 1.8;
-        color: #606266;
-        white-space: pre-wrap;
-
-        &.problem {
-          background: #fef0f0;
-          color: #f56c6c;
-        }
-
-        &.review {
-          background: #ecf5ff;
-          color: #409eff;
-        }
+        background: #f5f7fa; padding: 12px 16px; border-radius: 4px;
+        line-height: 1.8; color: #606266; white-space: pre-wrap;
+        &.problem { background: #fef0f0; color: #f56c6c; }
+        &.guidance { background: #ecf5ff; color: #409eff; }
+        &.review { background: #fdf6ec; color: #e6a23c; }
       }
     }
   }
-
   .rectification-container {
-    .rect-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 12px;
-
-      .rect-title {
-        font-size: 14px;
-        font-weight: 600;
-        color: #303133;
-      }
-    }
+    .rect-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; .rect-title { font-size: 14px; font-weight: 600; color: #303133; } }
   }
-
-  .add-rectification {
-    padding-top: 10px;
-  }
+  .add-rectification { padding-top: 10px; }
+  .rect-content-display { background: #f5f7fa; padding: 10px 14px; border-radius: 4px; line-height: 1.6; color: #606266; white-space: pre-wrap; }
 }
 </style>

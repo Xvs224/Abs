@@ -10,7 +10,6 @@
                 <el-option label="用户管理" value="user" />
                 <el-option label="选题管理" value="topic" />
                 <el-option label="开题管理" value="proposal" />
-                <el-option label="过程指导" value="guidance" />
                 <el-option label="中期检查" value="midterm" />
                 <el-option label="论文管理" value="thesis" />
                 <el-option label="评阅答辩" value="review" />
@@ -211,7 +210,6 @@ const moduleLabel = (module) => {
     user: '用户管理',
     topic: '选题管理',
     proposal: '开题管理',
-    guidance: '过程指导',
     midterm: '中期检查',
     thesis: '论文管理',
     review: '评阅答辩',
@@ -226,7 +224,6 @@ const moduleTagType = (module) => {
     user: 'primary',
     topic: 'success',
     proposal: 'warning',
-    guidance: 'info',
     midterm: 'warning',
     thesis: 'primary',
     review: 'success',

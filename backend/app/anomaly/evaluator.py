@@ -28,10 +28,6 @@ class AnomalyEvaluator:
 
     # 用于评估的特征维度（学生综合特征）
     EVAL_FEATURE_KEYS: List[str] = [
-        "guidance_count",
-        "avg_guidance_interval_days",
-        "avg_guidance_duration",
-        "guidance_completion_rate",
         "progress_percentage",
         "midterm_score",
         "rectification_count",
@@ -49,10 +45,6 @@ class AnomalyEvaluator:
     # 各特征的正常范围（用于生成测试数据）
     FEATURE_NORMAL_RANGES: Dict[str, Tuple[float, float, float]] = {
         # (均值, 标准差, 方向: high/low/both)
-        "guidance_count": (12.0, 3.0, "low"),
-        "avg_guidance_interval_days": (7.0, 2.0, "high"),
-        "avg_guidance_duration": (45.0, 15.0, "low"),
-        "guidance_completion_rate": (0.85, 0.15, "low"),
         "progress_percentage": (75.0, 15.0, "low"),
         "midterm_score": (78.0, 10.0, "low"),
         "rectification_count": (1.0, 1.0, "high"),
@@ -160,8 +152,6 @@ class AnomalyEvaluator:
                                 "midterm_score", "review_avg_score",
                                 "defense_score"):
                 value = min(100.0, value)
-            if feature_name in ("guidance_completion_rate",):
-                value = min(1.0, value)
             features[feature_name] = round(value, 2)
         return features
 
@@ -191,8 +181,6 @@ class AnomalyEvaluator:
                                 "midterm_score", "review_avg_score",
                                 "defense_score"):
                 value = min(100.0, value)
-            if feature_name in ("guidance_completion_rate",):
-                value = min(1.0, value)
 
             features[feature_name] = round(value, 2)
         return features
@@ -235,8 +223,6 @@ class AnomalyEvaluator:
                                 "midterm_score", "review_avg_score",
                                 "defense_score"):
                 value = min(100.0, value)
-            if feature_name in ("guidance_completion_rate",):
-                value = min(1.0, value)
 
             features[feature_name] = round(value, 2)
 
@@ -547,45 +533,101 @@ class AnomalyEvaluator:
     ) -> Dict[str, Any]:
         """使用真实数据评估检测方法
 
-        通过已复核的异常记录来评估检测准确性。
+        通过已人工复核的异常记录来评估检测准确性。
+        真实数据评估能反映算法在实际业务中的表现，是系统投产的关键依据。
+
+        指标说明：
+        - TP (确认异常)：review_status == "confirmed"
+        - FP (误报)：review_status == "false_positive"
+        - 忽略/已处理：review_status in ("ignored", "resolved")，不计入精确率分母
+        - 精确率 precision = TP / (TP + FP)  ← 已复核样本中真实异常占比（可靠指标）
+        - 复核覆盖率 reviewed_rate = 已复核数 / 检测总数
+        - 异常检出率 anomaly_rate = 检测总数 / 扫描目标总数
 
         Args:
             method: 检测方法
 
         Returns:
-            评估结果
+            评估结果字典
         """
         from app.models.anomaly import AnomalyRecord
+        from datetime import datetime
 
-        # 获取已复核的异常记录
-        reviewed_records = self.db.query(AnomalyRecord).filter(
-            AnomalyRecord.review_status.in_(["confirmed", "false_positive"])
-        ).all()
+        # 所有检测记录
+        all_records = self.db.query(AnomalyRecord).all()
+        total_detected = len(all_records)
 
-        if not reviewed_records:
-            return {
-                "error": "没有已复核的记录，无法使用真实数据评估",
-                "reviewed_count": 0,
-            }
+        # 已复核的记录（confirmed / false_positive 用于精确率计算）
+        reviewed_records = [
+            r for r in all_records
+            if r.review_status in ("confirmed", "false_positive")
+        ]
 
-        # 构造真实标签和预测结果
-        # confirmed = 真实异常 (TP)，false_positive = 误报 (FP)
-        # 注意：这里只能部分评估，因为缺少真实正常的样本
+        confirmed_count = sum(1 for r in reviewed_records if r.review_status == "confirmed")
+        false_positive_count = sum(1 for r in reviewed_records if r.review_status == "false_positive")
+        ignored_count = sum(1 for r in all_records if r.review_status == "ignored")
+        resolved_count = sum(1 for r in all_records if r.review_status == "resolved")
+        pending_count = sum(1 for r in all_records if r.review_status == "pending")
+        reviewed_total = len(reviewed_records)
 
-        confirmed_count = sum(
-            1 for r in reviewed_records if r.review_status == "confirmed"
+        # 精确率（基于已复核的 confirmed + false_positive）
+        precision = (
+            confirmed_count / reviewed_total if reviewed_total > 0 else 0.0
         )
-        false_positive_count = sum(
-            1 for r in reviewed_records if r.review_status == "false_positive"
+
+        # 复核覆盖率
+        reviewed_rate = (
+            reviewed_total / total_detected if total_detected > 0 else 0.0
         )
 
-        precision = confirmed_count / len(reviewed_records) if reviewed_records else 0.0
+        # 严重等级分布（基于 confirmed 真实异常）
+        confirmed_records = [r for r in reviewed_records if r.review_status == "confirmed"]
+        severity_dist = {"L1": 0, "L2": 0, "L3": 0}
+        for r in confirmed_records:
+            lvl = r.severity_level if r.severity_level in severity_dist else "L1"
+            severity_dist[lvl] += 1
+
+        # 按目标类型统计
+        by_type: Dict[str, Dict[str, int]] = {}
+        for r in all_records:
+            t = r.target_type or "unknown"
+            if t not in by_type:
+                by_type[t] = {"total": 0, "confirmed": 0, "false_positive": 0, "pending": 0}
+            by_type[t]["total"] += 1
+            if r.review_status == "confirmed":
+                by_type[t]["confirmed"] += 1
+            elif r.review_status == "false_positive":
+                by_type[t]["false_positive"] += 1
+            elif r.review_status == "pending":
+                by_type[t]["pending"] += 1
+
+        # 估算扫描目标总数（用于异常检出率）
+        # 通过异常记录中的 target_id 去重 + 类型推断
+        scanned_targets = len(set(
+            (r.target_type, r.target_id) for r in all_records
+        ))
+        anomaly_rate = (
+            total_detected / scanned_targets if scanned_targets > 0 else 0.0
+        )
 
         return {
             "method": method,
-            "reviewed_total": len(reviewed_records),
-            "confirmed_count": confirmed_count,
-            "false_positive_count": false_positive_count,
+            "evaluation_type": "real",
+            "total_samples": total_detected,
+            "reviewed_total": reviewed_total,
+            "true_positives": confirmed_count,
+            "false_positives": false_positive_count,
+            "ignored_count": ignored_count,
+            "resolved_count": resolved_count,
+            "pending_count": pending_count,
             "precision": round(precision, 4),
-            "note": "基于已复核记录的精确率评估，缺少正常样本无法计算完整指标",
+            "reviewed_rate": round(reviewed_rate, 4),
+            "anomaly_rate": round(anomaly_rate, 4),
+            "severity_distribution": severity_dist,
+            "by_type": by_type,
+            "evaluation_time": datetime.now().isoformat(),
+            "note": (
+                "精确率基于已人工复核的记录计算（confirmed=TP, false_positive=FP）。"
+                "召回率因缺少正常样本的人工标注无法精确计算，建议结合复核覆盖率综合判断。"
+            ),
         }

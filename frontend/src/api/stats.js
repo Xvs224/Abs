@@ -20,11 +20,6 @@ export function getAnomalyTrend(days = 7) {
   return request.get('/stats/anomaly-trend', { days })
 }
 
-// 指导统计
-export function getGuidanceStats() {
-  return request.get('/stats/guidance-stats')
-}
-
 // 成绩分布
 export function getScoreDistribution() {
   return request.get('/stats/score-distribution')

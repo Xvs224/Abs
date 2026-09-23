@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import NProgress from 'nprogress'
 import 'nprogress/nprogress.css'
+import studentRoutes from './student'
 
 NProgress.configure({ showSpinner: false })
 
@@ -12,6 +13,8 @@ const routes = [
     component: () => import('@/views/login/index.vue'),
     meta: { title: '登录', requiresAuth: false }
   },
+  // 学生端独立路由
+  ...studentRoutes,
   {
     path: '/',
     component: () => import('@/layout/index.vue'),
@@ -22,71 +25,90 @@ const routes = [
         path: 'dashboard',
         name: 'Dashboard',
         component: () => import('@/views/dashboard/index.vue'),
-        meta: { title: '数据看板', icon: 'DataAnalysis', roles: ['admin', 'teacher', 'student'] }
+        meta: { title: '数据看板', icon: 'DataAnalysis', roles: ['admin', 'teacher'] }
       },
       {
         path: 'profile',
         name: 'Profile',
         component: () => import('@/views/profile/index.vue'),
-        meta: { title: '个人中心', icon: 'User', hidden: true, roles: ['admin', 'teacher', 'student'] }
+        meta: { title: '个人中心', icon: 'User', hidden: true, roles: ['admin', 'teacher'] }
       },
-      // 选题管理 - 学生：申报选题；教师：审核选题；管理员：全部
       {
         path: 'topics',
         name: 'Topics',
         component: () => import('@/views/topics/index.vue'),
-        meta: { title: '选题管理', icon: 'Document', roles: ['admin', 'teacher', 'student'] }
+        meta: { title: '选题管理', icon: 'Document', roles: ['admin', 'teacher'] }
       },
-      // 开题管理 - 学生：提交开题；教师：审核；管理员：全部
       {
         path: 'proposals',
         name: 'Proposals',
         component: () => import('@/views/proposals/index.vue'),
-        meta: { title: '开题管理', icon: 'Files', roles: ['admin', 'teacher', 'student'] }
+        meta: { title: '开题管理', icon: 'Files', roles: ['admin', 'teacher'] }
       },
-      // 过程指导 - 学生：查看自己的指导记录；教师：记录指导；管理员：全部
-      {
-        path: 'guidance',
-        name: 'Guidance',
-        component: () => import('@/views/guidance/index.vue'),
-        meta: { title: '过程指导', icon: 'ChatDotRound', roles: ['admin', 'teacher', 'student'] }
-      },
-      // 中期检查 - 学生：提交中期报告；教师：评审；管理员：全部
       {
         path: 'midterm',
         name: 'Midterm',
         component: () => import('@/views/midterm/index.vue'),
-        meta: { title: '中期检查', icon: 'CircleCheck', roles: ['admin', 'teacher', 'student'] }
+        meta: { title: '中期检查', icon: 'CircleCheck', roles: ['admin', 'teacher'] }
       },
-      // 论文版本 - 学生：提交版本；教师：查验；管理员：全部
       {
         path: 'thesis',
         name: 'Thesis',
-        component: () => import('@/views/thesis/index.vue'),
-        meta: { title: '论文版本', icon: 'DocumentCopy', roles: ['admin', 'teacher', 'student'] }
+        redirect: '/thesis/draft1',
+        meta: { title: '论文版本', icon: 'DocumentCopy', roles: ['admin', 'teacher'] },
+        children: [
+          {
+            path: 'draft1',
+            name: 'ThesisDraft1',
+            component: () => import('@/views/thesis/index.vue'),
+            meta: { title: '论文一稿', icon: 'Document', roles: ['admin', 'teacher'] }
+          },
+          {
+            path: 'draft2',
+            name: 'ThesisDraft2',
+            component: () => import('@/views/thesis/index.vue'),
+            meta: { title: '论文二稿', icon: 'Document', roles: ['admin', 'teacher'] }
+          },
+          {
+            path: 'final',
+            name: 'ThesisFinal',
+            component: () => import('@/views/thesis/index.vue'),
+            meta: { title: '论文终审', icon: 'DocumentChecked', roles: ['admin', 'teacher'] }
+          }
+        ]
       },
-      // 评阅答辩 - 教师：评阅答辩评分；管理员：全部；学生：查看自己的评阅答辩结果
       {
         path: 'reviews',
         name: 'Reviews',
-        component: () => import('@/views/reviews/index.vue'),
-        meta: { title: '评阅答辩', icon: 'EditPen', roles: ['admin', 'teacher', 'student'] }
+        redirect: '/reviews/review',
+        meta: { title: '评阅答辩', icon: 'EditPen', roles: ['admin', 'teacher'] },
+        children: [
+          {
+            path: 'review',
+            name: 'ReviewList',
+            component: () => import('@/views/reviews/index.vue'),
+            meta: { title: '论文评阅', icon: 'Reading', roles: ['admin', 'teacher'] }
+          },
+          {
+            path: 'defense',
+            name: 'DefenseList',
+            component: () => import('@/views/reviews/index.vue'),
+            meta: { title: '答辩评价', icon: 'ChatLineSquare', roles: ['admin', 'teacher'] }
+          }
+        ]
       },
-      // 异常检测 - 教师：查看异常并复核；管理员：全部；学生：查看自己的异常提示
       {
         path: 'anomaly',
         name: 'Anomaly',
         component: () => import('@/views/anomaly/index.vue'),
-        meta: { title: '异常检测', icon: 'Warning', roles: ['admin', 'teacher', 'student'] }
+        meta: { title: '异常检测', icon: 'Warning', roles: ['admin', 'teacher'] }
       },
-      // 成果归档 - 管理员：归档管理；教师：查看；学生：查看自己的归档
       {
         path: 'archives',
         name: 'Archives',
         component: () => import('@/views/archives/index.vue'),
-        meta: { title: '成果归档', icon: 'Box', roles: ['admin', 'teacher', 'student'] }
+        meta: { title: '成果归档', icon: 'Box', roles: ['admin', 'teacher'] }
       },
-      // 系统管理 - 仅管理员
       {
         path: 'system',
         name: 'System',
@@ -126,27 +148,55 @@ const router = createRouter({
   routes
 })
 
-// 路由守卫
+function getHomePage(role) {
+  if (role === 'student') {
+    return '/student/dashboard'
+  }
+  return '/dashboard'
+}
+
 router.beforeEach((to, from, next) => {
   NProgress.start()
   document.title = to.meta.title ? `${to.meta.title} - 毕业论文质量监控系统` : '毕业论文质量监控系统'
 
   const userStore = useUserStore()
 
-  // 检查是否需要登录
   if (to.meta.requiresAuth === false) {
     next()
     return
   }
 
-  // 检查登录状态
   if (!userStore.token) {
     next({ path: '/login', query: { redirect: to.fullPath } })
     return
   }
 
+  const role = userStore.userInfo?.role
+
+  if (to.path === '/') {
+    next(getHomePage(role))
+    return
+  }
+
+  // 学生只能访问 /student/ 下的路由
+  if (role === 'student' && !to.path.startsWith('/student')) {
+    next(getHomePage(role))
+    return
+  }
+
+  // 教师和管理员不能访问学生端路由
+  if (role !== 'student' && to.path.startsWith('/student')) {
+    next(getHomePage(role))
+    return
+  }
+
   // 检查角色权限
-  if (to.meta.roles && !to.meta.roles.includes(userStore.userInfo?.role)) {
+  if (to.meta.roles && !to.meta.roles.includes(role)) {
+    const home = getHomePage(role)
+    if (to.path !== home) {
+      next(home)
+      return
+    }
     next('/404')
     return
   }

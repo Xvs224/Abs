@@ -3,15 +3,15 @@
     <!-- 侧边栏 -->
     <div class="sidebar" :class="{ collapsed: appStore.sidebarCollapsed }">
       <div class="logo">
-        <el-icon size="28" color="#fff"><DataAnalysis /></el-icon>
+        <el-icon size="28" :color="themeVars.logoColor"><DataAnalysis /></el-icon>
         <span v-show="!appStore.sidebarCollapsed" class="logo-text">论文质量监控</span>
       </div>
       <el-menu
         :default-active="activeMenu"
         class="sidebar-menu"
-        background-color="#1f2d3d"
-        text-color="#bfcbd9"
-        active-text-color="#409eff"
+        :background-color="themeVars.sidebarBg"
+        :text-color="themeVars.sidebarText"
+        :active-text-color="themeVars.sidebarActiveText"
         :collapse="appStore.sidebarCollapsed"
         :collapse-transition="false"
         router
@@ -49,7 +49,7 @@
             <Expand v-else />
           </el-icon>
           <el-breadcrumb separator="/">
-            <el-breadcrumb-item :to="{ path: '/dashboard' }">首页</el-breadcrumb-item>
+ <el-breadcrumb-item :to="{ path: homePath }">首页</el-breadcrumb-item>
             <el-breadcrumb-item>{{ currentPageTitle }}</el-breadcrumb-item>
           </el-breadcrumb>
         </div>
@@ -101,14 +101,26 @@ const router = useRouter()
 const userStore = useUserStore()
 const appStore = useAppStore()
 
+// 教师/管理员端主题变量（专业、沉稳的蓝灰色系）
+const themeVars = {
+  primary: '#2563eb',
+  primaryLight: '#3b82f6',
+  primaryLighter: '#dbeafe',
+  sidebarBg: '#1e293b',
+  sidebarLogoBg: '#0f172a',
+  sidebarText: '#cbd5e1',
+  sidebarActiveText: '#93c5fd',
+  sidebarActiveBg: 'rgba(37, 99, 235, 0.18)',
+  logoColor: '#60a5fa',
+}
+
 const activeMenu = computed(() => route.path)
 const currentPageTitle = computed(() => route.meta.title || '')
 
 const roleText = computed(() => {
   const roleMap = {
     admin: '管理员',
-    teacher: '教师',
-    student: '学生'
+    teacher: '教师'
   }
   return roleMap[userStore.userInfo?.role] || userStore.userInfo?.role
 })
@@ -117,15 +129,33 @@ const roleText = computed(() => {
 const menuList = computed(() => {
   const role = userStore.userInfo?.role
   const allMenus = [
-    { path: 'dashboard', title: '数据看板', icon: 'DataAnalysis', roles: ['admin', 'teacher', 'student'] },
-    { path: 'topics', title: '选题管理', icon: 'Document', roles: ['admin', 'teacher', 'student'] },
-    { path: 'proposals', title: '开题管理', icon: 'Files', roles: ['admin', 'teacher', 'student'] },
-    { path: 'guidance', title: '过程指导', icon: 'ChatDotRound', roles: ['admin', 'teacher', 'student'] },
-    { path: 'midterm', title: '中期检查', icon: 'CircleCheck', roles: ['admin', 'teacher', 'student'] },
-    { path: 'thesis', title: '论文版本', icon: 'DocumentCopy', roles: ['admin', 'teacher', 'student'] },
-    { path: 'reviews', title: '评阅答辩', icon: 'EditPen', roles: ['admin', 'teacher', 'student'] },
-    { path: 'anomaly', title: '异常检测', icon: 'Warning', roles: ['admin', 'teacher', 'student'] },
-    { path: 'archives', title: '成果归档', icon: 'Box', roles: ['admin', 'teacher', 'student'] },
+    { path: 'dashboard', title: '数据看板', icon: 'DataAnalysis', roles: ['admin', 'teacher'] },
+    { path: 'topics', title: '选题管理', icon: 'Document', roles: ['admin', 'teacher'] },
+    { path: 'proposals', title: '开题管理', icon: 'Files', roles: ['admin', 'teacher'] },
+    { path: 'midterm', title: '中期检查', icon: 'CircleCheck', roles: ['admin', 'teacher'] },
+    {
+      path: 'thesis',
+      title: '论文版本',
+      icon: 'DocumentCopy',
+      roles: ['admin', 'teacher'],
+      children: [
+        { path: 'draft1', title: '论文一稿', icon: 'Document' },
+        { path: 'draft2', title: '论文二稿', icon: 'Document' },
+        { path: 'final', title: '论文终审', icon: 'DocumentChecked' }
+      ]
+    },
+    {
+      path: 'reviews',
+      title: '评阅答辩',
+      icon: 'EditPen',
+      roles: ['admin', 'teacher'],
+      children: [
+        { path: 'review', title: '论文评阅', icon: 'Reading' },
+        { path: 'defense', title: '答辩评价', icon: 'ChatLineSquare' }
+      ]
+    },
+    { path: 'anomaly', title: '异常检测', icon: 'Warning', roles: ['admin', 'teacher'] },
+    { path: 'archives', title: '成果归档', icon: 'Box', roles: ['admin', 'teacher'] },
   ]
 
   const menus = allMenus.filter(m => !m.roles || m.roles.includes(role))
@@ -144,6 +174,11 @@ const menuList = computed(() => {
   }
 
   return menus
+})
+
+// 首页路径
+const homePath = computed(() => {
+  return '/dashboard'
 })
 
 const handleCommand = (command) => {
@@ -165,30 +200,50 @@ const handleCommand = (command) => {
 
 <style scoped lang="scss">
 .layout-container {
+  /* 教师/管理员端主题令牌 */
+  --primary: #2563eb;
+  --primary-light: #3b82f6;
+  --primary-lighter: #dbeafe;
+  --sidebar-bg: #1e293b;
+  --sidebar-logo-bg: #0f172a;
+  --sidebar-text: #cbd5e1;
+  --sidebar-active-text: #93c5fd;
+  --sidebar-active-bg: rgba(37, 99, 235, 0.18);
+  --sidebar-hover-bg: rgba(255, 255, 255, 0.06);
+
+  /* 覆盖 Element Plus 主色为教师端蓝 */
+  --el-color-primary: #2563eb;
+  --el-color-primary-light-3: #5b8def;
+  --el-color-primary-light-5: #84abf3;
+  --el-color-primary-light-7: #adc8f7;
+  --el-color-primary-light-8: #c2d6fa;
+  --el-color-primary-light-9: #d6e4fc;
+  --el-color-primary-dark-2: #1e4fbc;
+
   display: flex;
   height: 100vh;
   overflow: hidden;
 }
 
 .sidebar {
-  width: 220px;
-  background: #1f2d3d;
+  width: var(--sidebar-width);
+  background: var(--sidebar-bg);
   transition: width 0.3s;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
 
   &.collapsed {
-    width: 64px;
+    width: var(--sidebar-collapsed-width);
   }
 
   .logo {
-    height: 60px;
+    height: var(--header-height);
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 10px;
-    background: #17202a;
+    background: var(--sidebar-logo-bg);
     color: #fff;
     font-size: 16px;
     font-weight: 600;
@@ -197,6 +252,7 @@ const handleCommand = (command) => {
 
     .logo-text {
       font-size: 15px;
+      letter-spacing: 0.5px;
     }
   }
 
@@ -208,6 +264,16 @@ const handleCommand = (command) => {
     :deep(.el-sub-menu__title) {
       height: 50px;
       line-height: 50px;
+      transition: var(--transition-base);
+
+      &:hover {
+        background-color: var(--sidebar-hover-bg) !important;
+      }
+    }
+
+    :deep(.el-menu-item.is-active) {
+      background-color: var(--sidebar-active-bg) !important;
+      border-right: 3px solid var(--sidebar-active-text);
     }
   }
 }
@@ -220,14 +286,15 @@ const handleCommand = (command) => {
 }
 
 .header {
-  height: 60px;
-  background: #fff;
-  border-bottom: 1px solid #e4e7ed;
+  height: var(--header-height);
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--color-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 20px;
   flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
 
   .header-left {
     display: flex;
@@ -237,10 +304,11 @@ const handleCommand = (command) => {
     .toggle-btn {
       font-size: 20px;
       cursor: pointer;
-      color: #606266;
+      color: var(--color-text-regular);
+      transition: var(--transition-base);
 
       &:hover {
-        color: #409eff;
+        color: var(--primary);
       }
     }
   }
@@ -252,16 +320,16 @@ const handleCommand = (command) => {
       gap: 10px;
       cursor: pointer;
       padding: 5px 10px;
-      border-radius: 4px;
-      transition: background 0.2s;
+      border-radius: var(--radius-sm);
+      transition: var(--transition-base);
 
       &:hover {
-        background: #f5f7fa;
+        background: var(--color-fill);
       }
 
       .username {
         font-size: 14px;
-        color: #303133;
+        color: var(--color-text-primary);
       }
     }
   }
@@ -271,7 +339,7 @@ const handleCommand = (command) => {
   flex: 1;
   overflow-y: auto;
   padding: 20px;
-  background: #f5f7fa;
+  background: var(--bg-page);
 }
 
 .fade-enter-active,

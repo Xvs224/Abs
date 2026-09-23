@@ -14,6 +14,7 @@ class TopicBase(BaseModel):
     significance: Optional[str] = Field(default="", description="研究意义")
     keywords: Optional[str] = Field(default="", max_length=200, description="关键词")
     source: Optional[str] = Field(default="", max_length=50, description="题目来源")
+    source_type: Optional[str] = Field(default="student", description="选题类型: teacher教师发布/student学生自拟")
     difficulty: Optional[str] = Field(default="medium", description="难度")
     workload: Optional[str] = Field(default="medium", description="工作量")
     teacher_id: Optional[int] = Field(default=None, description="指导教师ID")
@@ -24,6 +25,36 @@ class TopicCreate(TopicBase):
     pass
 
 
+class TeacherTopicCreate(BaseModel):
+    """教师发布选题请求"""
+    title: str = Field(..., min_length=5, max_length=200, description="题目名称")
+    direction: Optional[str] = Field(default="", max_length=100, description="研究方向")
+    background: Optional[str] = Field(default="", description="研究背景")
+    significance: Optional[str] = Field(default="", description="研究意义")
+    keywords: Optional[str] = Field(default="", max_length=200, description="关键词")
+    source: Optional[str] = Field(default="teacher_project", max_length=50, description="题目来源")
+    difficulty: Optional[str] = Field(default="medium", description="难度")
+    workload: Optional[str] = Field(default="medium", description="工作量")
+
+
+class StudentTopicCreate(BaseModel):
+    """学生自拟选题请求"""
+    title: str = Field(..., min_length=5, max_length=200, description="题目名称")
+    direction: Optional[str] = Field(default="", max_length=100, description="研究方向")
+    background: Optional[str] = Field(default="", description="研究背景")
+    significance: Optional[str] = Field(default="", description="研究意义")
+    keywords: Optional[str] = Field(default="", max_length=200, description="关键词")
+    source: Optional[str] = Field(default="student_self", max_length=50, description="题目来源")
+    teacher_id: Optional[int] = Field(default=None, description="指导教师ID")
+    difficulty: Optional[str] = Field(default="medium", description="难度")
+    workload: Optional[str] = Field(default="medium", description="工作量")
+
+
+class TopicSelect(BaseModel):
+    """学生选择教师发布选题请求"""
+    topic_id: int = Field(..., description="选题ID")
+
+
 class TopicUpdate(BaseModel):
     """更新选题请求"""
     title: Optional[str] = None
@@ -32,6 +63,7 @@ class TopicUpdate(BaseModel):
     significance: Optional[str] = None
     keywords: Optional[str] = None
     source: Optional[str] = None
+    source_type: Optional[str] = None
     difficulty: Optional[str] = None
     workload: Optional[str] = None
     teacher_id: Optional[int] = None
@@ -46,7 +78,7 @@ class TopicReview(BaseModel):
 class TopicResponse(TopicBase):
     """选题响应"""
     id: int
-    student_id: int
+    student_id: Optional[int] = None
     status: str
     reject_reason: str = ""
     review_time: Optional[datetime] = None

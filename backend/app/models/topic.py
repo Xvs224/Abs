@@ -13,7 +13,7 @@ class Topic(Base):
     __tablename__ = "topics"
 
     id = Column(Integer, primary_key=True, index=True, comment="选题ID")
-    student_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True, comment="学生ID")
+    student_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True, comment="学生ID（教师发布的选题为空）")
     teacher_id = Column(Integer, ForeignKey("users.id"), index=True, comment="指导教师ID")
     title = Column(String(200), nullable=False, comment="题目名称")
     direction = Column(String(100), default="", comment="研究方向")
@@ -21,9 +21,10 @@ class Topic(Base):
     significance = Column(Text, default="", comment="研究意义")
     keywords = Column(String(200), default="", comment="关键词，逗号分隔")
     source = Column(String(50), default="", comment="题目来源")
+    source_type = Column(String(20), default="student", comment="选题类型: teacher教师发布/student学生自拟")
     difficulty = Column(String(20), default="medium", comment="难度: easy/medium/hard")
     workload = Column(String(20), default="medium", comment="工作量: light/medium/heavy")
-    status = Column(String(20), default="pending", comment="状态: pending待审核/approved已确认/rejected已拒绝/withdrawn已撤回")
+    status = Column(String(20), default="pending", comment="状态: available可选/pending待审核/approved已通过/rejected已拒绝/withdrawn已撤回")
     reject_reason = Column(String(500), default="", comment="拒绝原因")
     review_time = Column(DateTime, comment="审核时间")
     reviewer_id = Column(Integer, ForeignKey("users.id"), comment="审核人ID")

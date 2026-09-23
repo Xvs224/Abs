@@ -39,3 +39,30 @@ export function getAnomalyStats() {
 export function evaluateAnomaly(data) {
   return request.post('/anomaly/evaluate', data)
 }
+
+// ============ 定时检测调度管理 ============
+
+// 查询调度状态
+export function getScheduleStatus() {
+  return request.get('/anomaly/schedule')
+}
+
+// 更新 cron 表达式
+export function updateScheduleCron(cron) {
+  return request.put('/anomaly/schedule', null, { params: { cron } })
+}
+
+// 暂停定时检测
+export function pauseSchedule() {
+  return request.post('/anomaly/schedule/pause')
+}
+
+// 恢复定时检测
+export function resumeSchedule() {
+  return request.post('/anomaly/schedule/resume')
+}
+
+// 立即触发一次全量检测
+export function triggerDetectionNow() {
+  return request.post('/anomaly/schedule/trigger')
+}

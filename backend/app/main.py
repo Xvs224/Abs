@@ -1,15 +1,17 @@
 """
 FastAPI 主应用入口
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
 import os
 
 from app.config import settings
 from app.core.logger import setup_logging
 from app.core.exceptions import register_exception_handlers
 from app.core.middleware import OperationLogMiddleware
+from app.core.limiter import limiter
 from app.database import engine, Base
 
 # 设置日志
@@ -20,22 +22,29 @@ app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     description="基于异常检测的毕业论文全过程质量监控系统 API",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
+    docs_url="/docs" if settings.DEBUG else None,
+    redoc_url="/redoc" if settings.DEBUG else None,
+    openapi_url="/openapi.json" if settings.DEBUG else None,
 )
 
-# 注册 CORS 中间件
+# 限流器状态注册
+app.state.limiter = limiter
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"code": 429, "message": "请求过于频繁，请稍后再试", "data": None}
+    )
+
+# 注册 CORS 中间件 — 使用配置白名单而非通配符
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 生产环境应配置具体域名
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# 注册可信主机中间件
-# app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
 
 # 注册操作日志中间件
 app.add_middleware(OperationLogMiddleware)
@@ -118,11 +127,22 @@ async def startup_event():
     finally:
         db.close()
 
+    # 启动异常检测定时调度器
+    try:
+        from app.core.anomaly_scheduler import init_scheduler
+        init_scheduler()
+    except Exception as e:
+        print(f"启动异常检测调度器失败: {e}")
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """应用关闭事件"""
-    pass
+    try:
+        from app.core.anomaly_scheduler import shutdown_scheduler
+        shutdown_scheduler()
+    except Exception as e:
+        print(f"关闭异常检测调度器失败: {e}")
 
 
 # 注册路由
@@ -130,7 +150,6 @@ from app.api.auth import router as auth_router
 from app.api.users import router as users_router
 from app.api.topics import router as topics_router
 from app.api.proposals import router as proposals_router
-from app.api.guidance import router as guidance_router
 from app.api.midterm import router as midterm_router
 from app.api.thesis import router as thesis_router
 from app.api.reviews import router as reviews_router
@@ -138,12 +157,12 @@ from app.api.archives import router as archives_router
 from app.api.anomaly import router as anomaly_router
 from app.api.stats import router as stats_router
 from app.api.logs import router as logs_router
+from app.api.files import router as files_router
 
 app.include_router(auth_router, tags=["认证"])
 app.include_router(users_router, tags=["用户管理"])
 app.include_router(topics_router, tags=["选题管理"])
 app.include_router(proposals_router, tags=["开题管理"])
-app.include_router(guidance_router, tags=["过程指导"])
 app.include_router(midterm_router, tags=["中期检查"])
 app.include_router(thesis_router, tags=["论文版本"])
 app.include_router(reviews_router, tags=["评阅答辩"])
@@ -151,6 +170,7 @@ app.include_router(archives_router, tags=["成果归档"])
 app.include_router(anomaly_router, tags=["异常检测"])
 app.include_router(stats_router, tags=["统计分析"])
 app.include_router(logs_router, tags=["操作日志"])
+app.include_router(files_router, tags=["文件管理"])
 
 
 @app.get("/", tags=["根路径"])

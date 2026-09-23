@@ -6,16 +6,15 @@
         <el-form-item label="状态">
           <el-select v-model="searchForm.status" placeholder="全部状态" clearable style="width: 140px">
             <el-option label="草稿" value="draft" />
-            <el-option label="待审核" value="pending" />
+            <el-option label="待审核" value="submitted" />
             <el-option label="已通过" value="approved" />
-            <el-option label="已拒绝" value="rejected" />
-            <el-option label="需修改" value="revision" />
+            <el-option label="已驳回" value="rejected" />
           </el-select>
         </el-form-item>
         <el-form-item label="关键词">
           <el-input
             v-model="searchForm.keyword"
-            placeholder="搜索标题/学生/导师"
+            placeholder="搜索题目/学生/导师"
             clearable
             style="width: 240px"
             @keyup.enter="handleSearch"
@@ -32,7 +31,6 @@
     <el-card class="table-card" shadow="never">
       <div class="table-toolbar">
         <div class="toolbar-left">
-          <el-button type="primary" :icon="Plus" @click="handleAdd">新增开题</el-button>
           <el-button :icon="RefreshRight" @click="loadList">刷新</el-button>
         </div>
       </div>
@@ -45,13 +43,15 @@
         style="width: 100%"
       >
         <el-table-column type="index" label="序号" width="60" align="center" />
-        <el-table-column prop="title" label="论文题目" min-width="200" show-overflow-tooltip>
+        <el-table-column prop="topic_title" label="论文题目" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">
-            <el-button type="primary" link @click="handleView(row)">{{ row.title }}</el-button>
+            <el-button type="primary" link @click="handleView(row)">{{ row.topic_title || '-' }}</el-button>
           </template>
         </el-table-column>
         <el-table-column prop="student_name" label="学生" width="100" />
         <el-table-column prop="teacher_name" label="指导教师" width="100" />
+        <el-table-column prop="word_count" label="字数" width="80" align="center" />
+        <el-table-column prop="references_count" label="参考文献" width="90" align="center" />
         <el-table-column prop="status" label="状态" width="100" align="center">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)" size="small">
@@ -59,39 +59,26 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="submitted_at" label="提交时间" width="160">
+        <el-table-column prop="submit_time" label="提交时间" width="160">
           <template #default="{ row }">
-            {{ formatTime(row.submitted_at) }}
+            {{ formatTime(row.submit_time) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="240" fixed="right" align="center">
+        <el-table-column label="操作" width="200" fixed="right" align="center">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="handleView(row)">查看</el-button>
-            <el-button
-              v-if="row.status === 'draft' || row.status === 'revision'"
-              type="success"
-              link
-              size="small"
-              @click="handleEdit(row)"
-            >
-              编辑
-            </el-button>
-            <el-button
-              v-if="row.status === 'draft'"
-              type="warning"
-              link
-              size="small"
-              @click="handleSubmit(row)"
-            >
-              提交
-            </el-button>
-            <template v-if="row.status === 'pending'">
-              <el-button type="success" link size="small" @click="handleReview(row, 'approved')">
+            <template v-if="row.status === 'submitted'">
+              <el-button type="success" link size="small" v-if='isTeacher' @click="handleReview(row, 'approved')">
                 通过
               </el-button>
-              <el-button type="danger" link size="small" @click="handleReview(row, 'rejected')">
+              <el-button type="danger" link size="small" v-if='isTeacher' @click="handleReview(row, 'rejected')">
                 拒绝
               </el-button>
+            </template>
+            <!-- 管理员可删除/重交 -->
+            <template v-if="isAdmin">
+              <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+              <el-button type="warning" link size="small" @click="handleResubmit(row)">重交</el-button>
             </template>
           </template>
         </el-table-column>
@@ -111,81 +98,6 @@
       </div>
     </el-card>
 
-    <!-- 新增/编辑对话框 -->
-    <el-dialog
-      v-model="dialogVisible"
-      :title="dialogTitle"
-      width="700px"
-      :close-on-click-modal="false"
-    >
-      <el-form
-        ref="formRef"
-        :model="formData"
-        :rules="formRules"
-        label-width="100px"
-        class="proposal-form"
-      >
-        <el-form-item label="论文题目" prop="title">
-          <el-input v-model="formData.title" placeholder="请输入论文题目" />
-        </el-form-item>
-        <el-form-item label="选题背景" prop="background">
-          <el-input
-            v-model="formData.background"
-            type="textarea"
-            :rows="3"
-            placeholder="请输入选题背景与意义"
-          />
-        </el-form-item>
-        <el-form-item label="研究内容" prop="content">
-          <el-input
-            v-model="formData.content"
-            type="textarea"
-            :rows="3"
-            placeholder="请输入主要研究内容"
-          />
-        </el-form-item>
-        <el-form-item label="研究方法" prop="method">
-          <el-input
-            v-model="formData.method"
-            type="textarea"
-            :rows="3"
-            placeholder="请输入研究方法与技术路线"
-          />
-        </el-form-item>
-        <el-form-item label="进度安排" prop="schedule">
-          <el-input
-            v-model="formData.schedule"
-            type="textarea"
-            :rows="3"
-            placeholder="请输入研究进度安排"
-          />
-        </el-form-item>
-        <el-form-item label="预期成果" prop="expected_outcome">
-          <el-input
-            v-model="formData.expected_outcome"
-            type="textarea"
-            :rows="2"
-            placeholder="请输入预期成果"
-          />
-        </el-form-item>
-        <el-form-item label="参考文献" prop="references">
-          <el-input
-            v-model="formData.references"
-            type="textarea"
-            :rows="3"
-            placeholder="请输入主要参考文献"
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button :loading="dialogLoading" @click="handleSaveDraft">保存草稿</el-button>
-        <el-button type="primary" :loading="dialogLoading" @click="handleSubmitForm">
-          提交审核
-        </el-button>
-      </template>
-    </el-dialog>
-
     <!-- 详情对话框 -->
     <el-dialog
       v-model="detailVisible"
@@ -195,7 +107,7 @@
       <div v-loading="detailLoading" class="proposal-detail">
         <template v-if="currentDetail">
           <el-descriptions :column="2" border>
-            <el-descriptions-item label="论文题目" :span="2">{{ currentDetail.title }}</el-descriptions-item>
+            <el-descriptions-item label="论文题目" :span="2">{{ currentDetail.topic_title || '-' }}</el-descriptions-item>
             <el-descriptions-item label="学生">{{ currentDetail.student_name || '-' }}</el-descriptions-item>
             <el-descriptions-item label="指导教师">{{ currentDetail.teacher_name || '-' }}</el-descriptions-item>
             <el-descriptions-item label="状态">
@@ -203,42 +115,54 @@
                 {{ statusLabel(currentDetail.status) }}
               </el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="提交时间">{{ formatTime(currentDetail.submitted_at) }}</el-descriptions-item>
+            <el-descriptions-item label="字数">{{ currentDetail.word_count || 0 }}</el-descriptions-item>
+            <el-descriptions-item label="参考文献数">{{ currentDetail.references_count || 0 }}</el-descriptions-item>
+            <el-descriptions-item label="提交时间">{{ formatTime(currentDetail.submit_time) }}</el-descriptions-item>
+            <el-descriptions-item label="审核时间" v-if="currentDetail.review_time">{{ formatTime(currentDetail.review_time) }}</el-descriptions-item>
+            <el-descriptions-item label="开题报告文档" :span="2">
+              <template v-if="currentDetail.file_name">
+                <el-button type="primary" link @click="handleDownloadFile(currentDetail)">
+                  <el-icon><Document /></el-icon>
+                  {{ currentDetail.file_name }}
+                </el-button>
+              </template>
+              <span v-else style="color: #909399">未上传</span>
+            </el-descriptions-item>
           </el-descriptions>
 
           <div class="detail-section">
-            <div class="section-title">选题背景与意义</div>
-            <div class="section-content">{{ currentDetail.background || '-' }}</div>
+            <div class="section-title">研究内容</div>
+            <div class="section-content">{{ currentDetail.research_content || '-' }}</div>
           </div>
 
           <div class="detail-section">
-            <div class="section-title">主要研究内容</div>
-            <div class="section-content">{{ currentDetail.content || '-' }}</div>
+            <div class="section-title">研究方法</div>
+            <div class="section-content">{{ currentDetail.research_method || '-' }}</div>
           </div>
 
           <div class="detail-section">
-            <div class="section-title">研究方法与技术路线</div>
-            <div class="section-content">{{ currentDetail.method || '-' }}</div>
-          </div>
-
-          <div class="detail-section">
-            <div class="section-title">研究进度安排</div>
-            <div class="section-content">{{ currentDetail.schedule || '-' }}</div>
+            <div class="section-title">技术路线</div>
+            <div class="section-content">{{ currentDetail.technical_route || '-' }}</div>
           </div>
 
           <div class="detail-section">
             <div class="section-title">预期成果</div>
-            <div class="section-content">{{ currentDetail.expected_outcome || '-' }}</div>
+            <div class="section-content">{{ currentDetail.expected_results || '-' }}</div>
           </div>
 
           <div class="detail-section">
-            <div class="section-title">主要参考文献</div>
-            <div class="section-content">{{ currentDetail.references || '-' }}</div>
+            <div class="section-title">进度安排</div>
+            <div class="section-content">{{ currentDetail.schedule_plan || '-' }}</div>
           </div>
 
-          <div class="detail-section" v-if="currentDetail.review_comment">
+          <div class="detail-section">
+            <div class="section-title">参考文献列表</div>
+            <div class="section-content">{{ currentDetail.references_list || '-' }}</div>
+          </div>
+
+          <div class="detail-section" v-if="currentDetail.review_opinion">
             <div class="section-title">审核意见</div>
-            <div class="section-content review-comment">{{ currentDetail.review_comment }}</div>
+            <div class="section-content review-comment">{{ currentDetail.review_opinion }}</div>
           </div>
         </template>
       </div>
@@ -263,7 +187,7 @@
       </el-form>
       <template #footer>
         <el-button @click="reviewVisible = false">取消</el-button>
-        <el-button :type="reviewAction === 'approved' ? 'success' : 'danger'" :loading="reviewLoading" @click="submitReview">
+        <el-button :type="reviewAction === 'approved' ? 'success' : 'danger'" :loading="reviewLoading" v-if='isTeacher' @click="submitReview">
           确认{{ reviewAction === 'approved' ? '通过' : '拒绝' }}
         </el-button>
       </template>
@@ -272,21 +196,23 @@
 </template>
 
 <script setup>
+import { useUserStore } from '@/store/user' 
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Refresh, Plus, RefreshRight } from '@element-plus/icons-vue'
+import { Search, Refresh, RefreshRight, Document } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import dayjs from 'dayjs'
 
+
+const userStore = useUserStore()
+const isTeacher = computed(() => userStore.userInfo?.role === 'teacher')
+const isAdmin = computed(() => userStore.userInfo?.role === 'admin')
+
 const loading = ref(false)
-const dialogVisible = ref(false)
-const dialogLoading = ref(false)
 const detailVisible = ref(false)
 const detailLoading = ref(false)
 const reviewVisible = ref(false)
 const reviewLoading = ref(false)
-const formRef = ref(null)
-const isEdit = ref(false)
 const currentRow = ref(null)
 const currentDetail = ref(null)
 const reviewAction = ref('approved')
@@ -303,49 +229,16 @@ const searchForm = reactive({
   keyword: ''
 })
 
-const formData = reactive({
-  id: null,
-  title: '',
-  background: '',
-  content: '',
-  method: '',
-  schedule: '',
-  expected_outcome: '',
-  references: ''
-})
-
 const reviewForm = reactive({
   comment: ''
 })
 
-const formRules = {
-  title: [
-    { required: true, message: '请输入论文题目', trigger: 'blur' },
-    { min: 5, max: 100, message: '长度在 5 到 100 个字符', trigger: 'blur' }
-  ],
-  background: [
-    { required: true, message: '请输入选题背景', trigger: 'blur' }
-  ],
-  content: [
-    { required: true, message: '请输入研究内容', trigger: 'blur' }
-  ],
-  method: [
-    { required: true, message: '请输入研究方法', trigger: 'blur' }
-  ],
-  schedule: [
-    { required: true, message: '请输入进度安排', trigger: 'blur' }
-  ]
-}
-
-const dialogTitle = computed(() => isEdit.value ? '编辑开题报告' : '新增开题报告')
-
 const statusLabel = (status) => {
   const map = {
     draft: '草稿',
-    pending: '待审核',
+    submitted: '待审核',
     approved: '已通过',
-    rejected: '已拒绝',
-    revision: '需修改'
+    rejected: '已驳回'
   }
   return map[status] || status
 }
@@ -353,10 +246,9 @@ const statusLabel = (status) => {
 const statusTagType = (status) => {
   const map = {
     draft: 'info',
-    pending: 'warning',
+    submitted: 'warning',
     approved: 'success',
-    rejected: 'danger',
-    revision: 'warning'
+    rejected: 'danger'
   }
   return map[status] || 'info'
 }
@@ -395,42 +287,6 @@ const handleReset = () => {
   loadList()
 }
 
-const resetForm = () => {
-  formData.id = null
-  formData.title = ''
-  formData.background = ''
-  formData.content = ''
-  formData.method = ''
-  formData.schedule = ''
-  formData.expected_outcome = ''
-  formData.references = ''
-  formRef.value?.resetFields()
-}
-
-const handleAdd = () => {
-  isEdit.value = false
-  resetForm()
-  dialogVisible.value = true
-}
-
-const handleEdit = async (row) => {
-  isEdit.value = true
-  try {
-    const res = await request.get(`/proposals/${row.id}`)
-    formData.id = res.id
-    formData.title = res.title
-    formData.background = res.background
-    formData.content = res.content
-    formData.method = res.method
-    formData.schedule = res.schedule
-    formData.expected_outcome = res.expected_outcome
-    formData.references = res.references
-    dialogVisible.value = true
-  } catch (error) {
-    console.error('获取详情失败:', error)
-  }
-}
-
 const handleView = async (row) => {
   detailVisible.value = true
   detailLoading.value = true
@@ -445,61 +301,27 @@ const handleView = async (row) => {
   }
 }
 
-const handleSaveDraft = async () => {
-  try {
-    dialogLoading.value = true
-    const data = { ...formData, status: 'draft' }
-    if (isEdit.value) {
-      await request.put(`/proposals/${formData.id}`, data)
-    } else {
-      await request.post('/proposals', data)
-    }
-    ElMessage.success('保存成功')
-    dialogVisible.value = false
-    loadList()
-  } catch (error) {
-    console.error('保存失败:', error)
-  } finally {
-    dialogLoading.value = false
-  }
-}
-
-const handleSubmitForm = async () => {
-  if (!formRef.value) return
-  try {
-    await formRef.value.validate()
-    dialogLoading.value = true
-    const data = { ...formData, status: 'pending' }
-    if (isEdit.value) {
-      await request.put(`/proposals/${formData.id}`, data)
-    } else {
-      await request.post('/proposals', data)
-    }
-    ElMessage.success('提交成功')
-    dialogVisible.value = false
-    loadList()
-  } catch (error) {
-    if (error !== false) {
-      console.error('提交失败:', error)
-    }
-  } finally {
-    dialogLoading.value = false
-  }
-}
-
-const handleSubmit = (row) => {
-  ElMessageBox.confirm('确定要提交该开题报告审核吗？', '提交确认', {
-    confirmButtonText: '确定提交',
-    cancelButtonText: '取消',
-    type: 'warning'
+const handleDelete = (row) => {
+  ElMessageBox.confirm('确定要删除该开题报告吗？', '提示', {
+    confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning'
   }).then(async () => {
     try {
-      await request.put(`/proposals/${row.id}/submit`)
-      ElMessage.success('提交成功')
+      await request.delete(`/proposals/${row.id}`)
+      ElMessage.success('删除成功')
       loadList()
-    } catch (error) {
-      console.error('提交失败:', error)
-    }
+    } catch (e) { console.error('删除失败:', e) }
+  }).catch(() => {})
+}
+
+const handleResubmit = (row) => {
+  ElMessageBox.confirm('确定要重置该开题报告为草稿状态吗？', '重交确认', {
+    confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning'
+  }).then(async () => {
+    try {
+      await request.post(`/proposals/${row.id}/resubmit`)
+      ElMessage.success('已重置为草稿，可重新提交')
+      loadList()
+    } catch (e) { console.error('重交失败:', e) }
   }).catch(() => {})
 }
 
@@ -519,7 +341,7 @@ const submitReview = async () => {
     reviewLoading.value = true
     await request.post(`/proposals/${currentRow.value.id}/review`, {
       status: reviewAction.value,
-      comment: reviewForm.comment
+      review_opinion: reviewForm.comment
     })
     ElMessage.success(reviewAction.value === 'approved' ? '审核通过' : '已拒绝')
     reviewVisible.value = false
@@ -528,6 +350,25 @@ const submitReview = async () => {
     console.error('审核失败:', error)
   } finally {
     reviewLoading.value = false
+  }
+}
+
+const handleDownloadFile = async (row) => {
+  if (!row.file_id) {
+    ElMessage.warning('文件ID不存在')
+    return
+  }
+  try {
+    const response = await request.download(`/files/${row.file_id}/download`)
+    const blob = response.data || response
+    const url = window.URL.createObjectURL(new Blob([blob]))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = row.file_name || '开题报告'
+    link.click()
+    window.URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error('下载失败:', error)
   }
 }
 
@@ -554,14 +395,6 @@ onMounted(() => {
       display: flex;
       justify-content: flex-end;
       margin-top: 20px;
-    }
-  }
-
-  .proposal-form {
-    padding-right: 20px;
-
-    :deep(.el-textarea__inner) {
-      resize: vertical;
     }
   }
 

@@ -212,6 +212,70 @@ class AnomalyService:
             "items": items,
         }
 
+    def get_record_list_teacher(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+        student_ids: Optional[List[int]] = None,
+        target_type: Optional[str] = None,
+        severity_level: Optional[str] = None,
+        review_status: Optional[str] = None,
+        keyword: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """获取异常记录列表（教师维度，按负责学生过滤）
+
+        Args:
+            page: 页码
+            page_size: 每页大小
+            student_ids: 教师负责的学生ID列表
+            target_type: 目标类型筛选
+            severity_level: 严重等级筛选
+            review_status: 复核状态筛选
+            keyword: 关键词搜索
+
+        Returns:
+            分页结果字典
+        """
+        query = self.db.query(AnomalyRecord)
+
+        if not student_ids:
+            return {"total": 0, "page": page, "page_size": page_size, "items": []}
+
+        query = query.filter(AnomalyRecord.student_id.in_(student_ids))
+
+        if target_type:
+            query = query.filter(AnomalyRecord.target_type == target_type)
+        if severity_level:
+            query = query.filter(AnomalyRecord.severity_level == severity_level)
+        if review_status:
+            query = query.filter(AnomalyRecord.review_status == review_status)
+        if keyword:
+            query = query.filter(
+                or_(
+                    AnomalyRecord.description.like(f"%{keyword}%"),
+                    AnomalyRecord.feature_name.like(f"%{keyword}%"),
+                    AnomalyRecord.suggestion.like(f"%{keyword}%"),
+                )
+            )
+
+        total = query.count()
+
+        records = (
+            query.order_by(desc(AnomalyRecord.detection_time))
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
+
+        items = [self._record_to_dict(record) for record in records]
+
+        return {
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "items": items,
+        }
+
     def get_record_detail(self, record_id: int) -> Dict[str, Any]:
         """获取异常记录详情
 
@@ -365,53 +429,53 @@ class AnomalyService:
     # 统计数据聚合
     # ==================================================================
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self, student_ids: Optional[List[int]] = None) -> Dict[str, Any]:
         """获取异常统计数据
+
+        Args:
+            student_ids: 学生ID列表（教师维度过滤，None 表示全局）
 
         Returns:
             统计数据字典
         """
+        base_query = self.db.query(AnomalyRecord)
+        if student_ids is not None:
+            if not student_ids:
+                return {
+                    "total": 0, "L1": 0, "L2": 0, "L3": 0,
+                    "pending": 0, "confirmed": 0, "false_positive": 0, "ignored": 0,
+                    "by_type": {}, "recent_trend": [], "precision": 0.0, "reviewed_total": 0,
+                }
+            base_query = base_query.filter(AnomalyRecord.student_id.in_(student_ids))
+
         # 总数
-        total = self.db.query(func.count(AnomalyRecord.id)).scalar() or 0
+        total = base_query.count()
 
         # 按等级统计
-        l1_count = self.db.query(func.count(AnomalyRecord.id)).filter(
-            AnomalyRecord.severity_level == "L1"
-        ).scalar() or 0
-
-        l2_count = self.db.query(func.count(AnomalyRecord.id)).filter(
-            AnomalyRecord.severity_level == "L2"
-        ).scalar() or 0
-
-        l3_count = self.db.query(func.count(AnomalyRecord.id)).filter(
-            AnomalyRecord.severity_level == "L3"
-        ).scalar() or 0
+        l1_count = base_query.filter(AnomalyRecord.severity_level == "L1").count()
+        l2_count = base_query.filter(AnomalyRecord.severity_level == "L2").count()
+        l3_count = base_query.filter(AnomalyRecord.severity_level == "L3").count()
 
         # 按复核状态统计
-        pending_count = self.db.query(func.count(AnomalyRecord.id)).filter(
-            AnomalyRecord.review_status == "pending"
-        ).scalar() or 0
-
-        confirmed_count = self.db.query(func.count(AnomalyRecord.id)).filter(
-            AnomalyRecord.review_status == "confirmed"
-        ).scalar() or 0
-
-        false_positive_count = self.db.query(func.count(AnomalyRecord.id)).filter(
-            AnomalyRecord.review_status == "false_positive"
-        ).scalar() or 0
+        pending_count = base_query.filter(AnomalyRecord.review_status == "pending").count()
+        confirmed_count = base_query.filter(AnomalyRecord.review_status == "confirmed").count()
+        false_positive_count = base_query.filter(AnomalyRecord.review_status == "false_positive").count()
 
         # 按目标类型统计
         by_type_results = self.db.query(
             AnomalyRecord.target_type,
             func.count(AnomalyRecord.id).label("count"),
-        ).group_by(AnomalyRecord.target_type).all()
+        )
+        if student_ids is not None:
+            by_type_results = by_type_results.filter(AnomalyRecord.student_id.in_(student_ids))
+        by_type_results = by_type_results.group_by(AnomalyRecord.target_type).all()
 
         by_type: Dict[str, int] = {}
         for target_type, count in by_type_results:
             by_type[target_type] = count
 
         # 近7天趋势
-        recent_trend = self._get_recent_trend(days=7)
+        recent_trend = self._get_recent_trend(days=7, student_ids=student_ids)
 
         # 精确率（基于已复核记录）
         reviewed_total = confirmed_count + false_positive_count
@@ -421,24 +485,25 @@ class AnomalyService:
 
         return {
             "total": total,
-            "L1_count": l1_count,
-            "L2_count": l2_count,
-            "L3_count": l3_count,
-            "pending_count": pending_count,
-            "confirmed_count": confirmed_count,
-            "false_positive_count": false_positive_count,
-            "ignored_count": total - pending_count - confirmed_count - false_positive_count,
+            "L1": l1_count,
+            "L2": l2_count,
+            "L3": l3_count,
+            "pending": pending_count,
+            "confirmed": confirmed_count,
+            "false_positive": false_positive_count,
+            "ignored": total - pending_count - confirmed_count - false_positive_count,
             "by_type": by_type,
             "recent_trend": recent_trend,
             "precision": round(precision, 4),
             "reviewed_total": reviewed_total,
         }
 
-    def _get_recent_trend(self, days: int = 7) -> List[Dict[str, Any]]:
+    def _get_recent_trend(self, days: int = 7, student_ids: Optional[List[int]] = None) -> List[Dict[str, Any]]:
         """获取最近N天的异常趋势
 
         Args:
             days: 天数
+            student_ids: 学生ID列表（教师维度过滤）
 
         Returns:
             按日期统计的列表
@@ -451,28 +516,17 @@ class AnomalyService:
             day = date - timedelta(days=i)
             next_day = day + timedelta(days=1)
 
-            count = self.db.query(func.count(AnomalyRecord.id)).filter(
+            base = self.db.query(AnomalyRecord).filter(
                 AnomalyRecord.detection_time >= day,
                 AnomalyRecord.detection_time < next_day,
-            ).scalar() or 0
+            )
+            if student_ids is not None:
+                base = base.filter(AnomalyRecord.student_id.in_(student_ids))
 
-            l1 = self.db.query(func.count(AnomalyRecord.id)).filter(
-                AnomalyRecord.detection_time >= day,
-                AnomalyRecord.detection_time < next_day,
-                AnomalyRecord.severity_level == "L1",
-            ).scalar() or 0
-
-            l2 = self.db.query(func.count(AnomalyRecord.id)).filter(
-                AnomalyRecord.detection_time >= day,
-                AnomalyRecord.detection_time < next_day,
-                AnomalyRecord.severity_level == "L2",
-            ).scalar() or 0
-
-            l3 = self.db.query(func.count(AnomalyRecord.id)).filter(
-                AnomalyRecord.detection_time >= day,
-                AnomalyRecord.detection_time < next_day,
-                AnomalyRecord.severity_level == "L3",
-            ).scalar() or 0
+            count = base.count()
+            l1 = base.filter(AnomalyRecord.severity_level == "L1").count()
+            l2 = base.filter(AnomalyRecord.severity_level == "L2").count()
+            l3 = base.filter(AnomalyRecord.severity_level == "L3").count()
 
             result.append({
                 "date": day.isoformat(),
@@ -530,9 +584,11 @@ class AnomalyService:
         return {
             "id": record.id,
             "target_type": record.target_type,
+            "type": record.target_type,
             "target_id": record.target_id,
             "student_id": record.student_id,
             "student_name": student_name,
+            "related_student": student_name,
             "topic_id": record.topic_id,
             "topic_title": topic_title,
             "detection_type": record.detection_type,

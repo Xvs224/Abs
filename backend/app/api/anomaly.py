@@ -9,8 +9,9 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.core.response import success_response, page_response
-from app.core.security import get_current_user, require_admin, require_teacher_or_admin
+from app.core.security import get_current_user, require_admin, require_teacher_or_admin, require_student_or_teacher
 from app.models.user import User
+from app.models.topic import Topic
 from app.schemas.anomaly import (
     DetectionRequest,
     AnomalyReviewRequest,
@@ -19,6 +20,12 @@ from app.schemas.anomaly import (
 from app.services.anomaly_service import AnomalyService
 
 router = APIRouter(prefix="/api/anomaly", tags=["异常检测"])
+
+
+def _get_teacher_student_ids(db: Session, teacher_id: int):
+    """获取教师负责的所有学生ID"""
+    rows = db.query(Topic.student_id).filter(Topic.teacher_id == teacher_id).distinct().all()
+    return [r[0] for r in rows]
 
 
 # ==================================================================
@@ -34,12 +41,17 @@ def detect_anomaly(
     """
     手动触发单个目标的异常检测
 
-    - **target_type**: 目标类型 (student/topic/proposal/guidance/midterm/thesis/review)
+    - **target_type**: 目标类型 (student/topic/proposal/midterm/thesis/review)
     - **target_id**: 目标ID（scope=single 时必填）
     - **detection_method**: 检测方法 (iqr/isolation_forest/combined)
     - **scope**: 检测范围 (single/all)
     """
     service = AnomalyService(db)
+
+    # target_type 为空时，执行全量检测
+    if not request.target_type:
+        result = service.run_full_detection()
+        return success_response(data=result, message="全量检测完成")
 
     if request.scope == "all":
         # 全量检测某类型
@@ -116,20 +128,37 @@ def get_records(
 
     支持按目标类型、严重等级、复核状态、学生ID筛选，以及关键词搜索。
     """
-    # 数据隔离：学生只能查看自己的异常记录
+    # 数据隔离：学生只能查看自己的异常记录；教师只能查看自己负责学生的记录
     if current_user.role == "student":
         student_id = current_user.id
+    elif current_user.role == "teacher":
+        teacher_student_ids = _get_teacher_student_ids(db, current_user.id)
+        if not teacher_student_ids:
+            return page_response(items=[], total=0, page=page, page_size=page_size)
 
     service = AnomalyService(db)
-    result = service.get_record_list(
-        page=page,
-        page_size=page_size,
-        target_type=target_type,
-        severity_level=severity_level,
-        review_status=review_status,
-        student_id=student_id,
-        keyword=keyword,
-    )
+
+    # 教师维度：需要传入多个 student_id 过滤
+    if current_user.role == "teacher":
+        result = service.get_record_list_teacher(
+            page=page,
+            page_size=page_size,
+            student_ids=teacher_student_ids,
+            target_type=target_type,
+            severity_level=severity_level,
+            review_status=review_status,
+            keyword=keyword,
+        )
+    else:
+        result = service.get_record_list(
+            page=page,
+            page_size=page_size,
+            target_type=target_type,
+            severity_level=severity_level,
+            review_status=review_status,
+            student_id=student_id,
+            keyword=keyword,
+        )
     return page_response(
         items=result["items"],
         total=result["total"],
@@ -142,15 +171,19 @@ def get_records(
 def get_record_detail(
     record_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_teacher_or_admin),
+    current_user: User = Depends(require_student_or_teacher),
 ):
     """
     获取异常记录详情
 
     - **record_id**: 异常记录ID
+    - 学生只能查看自己的异常记录
     """
     service = AnomalyService(db)
     result = service.get_record_detail(record_id)
+    if current_user.role == "student" and result.get("student_id") != current_user.id:
+        from app.core.exceptions import ForbiddenException
+        raise ForbiddenException("无权查看他人的异常记录")
     return success_response(data=result)
 
 
@@ -211,9 +244,16 @@ def get_stats(
     获取异常检测统计数据
 
     包括总数、各等级数量、各类型分布、近7天趋势、复核精确率等。
+    教师仅看到自己负责学生的数据。
     """
     service = AnomalyService(db)
-    result = service.get_stats()
+
+    if current_user.role == "teacher":
+        student_ids = _get_teacher_student_ids(db, current_user.id)
+        result = service.get_stats(student_ids=student_ids)
+    else:
+        result = service.get_stats()
+
     return success_response(data=result)
 
 
@@ -241,3 +281,63 @@ def evaluate_detection(
         method=request.detection_method,
     )
     return success_response(data=result, message="评估完成")
+
+
+# ==================================================================
+# 定时检测调度管理（仅管理员）
+# ==================================================================
+
+@router.get("/schedule", summary="查询定时检测调度状态")
+def get_schedule_status(current_user: User = Depends(require_admin)):
+    """
+    查询异常检测定时任务的运行状态。
+
+    返回调度器启用状态、cron 表达式、下次执行时间、最近执行结果等。
+    """
+    from app.core.anomaly_scheduler import get_scheduler_state
+    return success_response(data=get_scheduler_state())
+
+
+@router.put("/schedule", summary="更新定时检测 cron 表达式")
+def update_schedule(
+    cron: str = Query(..., description="cron 表达式，5 字段：分 时 日 月 周，如 '0 2 * * *'"),
+    current_user: User = Depends(require_admin),
+):
+    """
+    更新全量检测的定时执行周期。
+
+    - **cron**: 5 字段 cron 表达式
+      - `0 2 * * *` = 每天凌晨 2 点
+      - `0 */6 * * *` = 每 6 小时
+      - `0 8,18 * * 1-5` = 工作日 8 点和 18 点
+    """
+    from app.core.anomaly_scheduler import update_cron
+    state = update_cron(cron)
+    return success_response(data=state, message="调度周期已更新")
+
+
+@router.post("/schedule/pause", summary="暂停定时检测")
+def pause_schedule(current_user: User = Depends(require_admin)):
+    """暂停自动定时检测（不影响手动触发）"""
+    from app.core.anomaly_scheduler import pause_scheduler
+    state = pause_scheduler()
+    return success_response(data=state, message="定时检测已暂停")
+
+
+@router.post("/schedule/resume", summary="恢复定时检测")
+def resume_schedule(current_user: User = Depends(require_admin)):
+    """恢复自动定时检测"""
+    from app.core.anomaly_scheduler import resume_scheduler
+    state = resume_scheduler()
+    return success_response(data=state, message="定时检测已恢复")
+
+
+@router.post("/schedule/trigger", summary="立即触发一次全量检测")
+def trigger_now(current_user: User = Depends(require_admin)):
+    """
+    立即在后台异步执行一次全量异常检测。
+    接口立即返回，检测结果可稍后在记录列表中查看。
+    """
+    from app.core.anomaly_scheduler import trigger_now
+    result = trigger_now()
+    return success_response(data=result, message="已触发全量检测")

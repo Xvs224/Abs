@@ -29,7 +29,7 @@ class AnomalyRecordCreate(AnomalyRecordBase):
 
 class AnomalyReviewRequest(BaseModel):
     """异常复核请求"""
-    result: str = Field(..., pattern="^(confirmed|false_positive|ignored)$")
+    result: str = Field(..., pattern="^(confirmed|false_positive|ignored|resolved)$")
     opinion: Optional[str] = ""
     correction: Optional[str] = ""
     correction_result: Optional[str] = ""
@@ -78,7 +78,7 @@ class AnomalyReviewResponse(BaseModel):
 
 class DetectionRequest(BaseModel):
     """异常检测请求"""
-    target_type: str
+    target_type: Optional[str] = None  # 为空时执行全量检测
     target_id: Optional[int] = None
     detection_method: Optional[str] = "combined"  # iqr / isolation_forest / combined
     scope: Optional[str] = "single"  # single / all
@@ -111,7 +111,7 @@ class BatchDetectionResult(BaseModel):
 
 class AnomalyEvaluationRequest(BaseModel):
     """异常检测评估请求"""
-    dataset_type: str = "all"  # normal / critical / abnormal / all
+    dataset_type: str = "all"  # normal / critical / abnormal / all / real(真实已复核数据)
     detection_method: str = "combined"
 
 

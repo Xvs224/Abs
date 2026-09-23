@@ -11,6 +11,7 @@ from app.models.topic import Topic
 from app.models.user import User
 from app.schemas.midterm import (
     MidtermCheckCreate, MidtermCheckUpdate, MidtermReview, MidtermCheckResponse,
+    MidtermGuidance, MidtermPPTSubmit,
     RectificationCreate, RectificationSubmit, RectificationReview, RectificationResponse,
 )
 from app.core.exceptions import NotFoundException, BusinessException
@@ -20,8 +21,19 @@ from app.schemas.common import PaginationParams
 # ==================== 中期检查 ====================
 
 def _enrich_midterm(midterm: MidtermCheck) -> dict:
-    """补充中期检查关联信息"""
-    data = {c.name: getattr(midterm, c.name) for c in midterm.__table__.columns}
+    """补充中期检查关联信息，处理数据库 NULL 值"""
+    data = {}
+    for c in midterm.__table__.columns:
+        val = getattr(midterm, c.name)
+        # 将 None 转为 Pydantic schema 期望的默认值
+        if val is None:
+            col_type = str(c.type).upper()
+            if 'TEXT' in col_type or 'VARCHAR' in col_type or 'CHAR' in col_type:
+                val = ""
+            elif 'FLOAT' in col_type or 'INT' in col_type or 'DECIMAL' in col_type:
+                val = 0
+            # DATETIME/DATE 保留 None (Optional)
+        data[c.name] = val
     data["topic_title"] = midterm.topic.title if midterm.topic else ""
     data["student_name"] = midterm.student.real_name if midterm.student else ""
     data["teacher_name"] = midterm.teacher.real_name if midterm.teacher else ""
@@ -135,6 +147,10 @@ def create_or_update_midterm(db: Session, data: MidtermCheckCreate, student_id: 
         progress_percentage=data.progress_percentage,
         existing_problems=data.existing_problems,
         next_plan=data.next_plan,
+        file_id=data.file_id,
+        file_path=data.file_path,
+        file_name=data.file_name,
+        stage="form",
         status="draft",
     )
     db.add(midterm)
@@ -166,7 +182,7 @@ def update_midterm(db: Session, midterm_id: int, data: MidtermCheckUpdate, curre
 
 
 def submit_midterm(db: Session, midterm_id: int, student_id: int) -> MidtermCheckResponse:
-    """提交中期检查"""
+    """学生提交中期检查表（阶段1）"""
     midterm = get_midterm_by_id(db, midterm_id)
     if not midterm:
         raise NotFoundException("中期检查不存在")
@@ -175,9 +191,14 @@ def submit_midterm(db: Session, midterm_id: int, student_id: int) -> MidtermChec
         raise BusinessException(403, "无权提交他人的中期检查")
 
     if midterm.status not in ["draft", "failed", "rectified"]:
-        raise BusinessException(400, "当前状态不允许提交中期检查")
+        raise BusinessException(400, "当前状态不允许提交中期检查表")
 
-    midterm.status = "submitted"
+    # 校验必须上传中期检查表
+    if not midterm.file_path or not midterm.file_name:
+        raise BusinessException(400, "请先上传中期检查表文档后再提交")
+
+    midterm.status = "form_submitted"
+    midterm.stage = "form"
     midterm.submit_time = datetime.utcnow()
 
     db.commit()
@@ -185,14 +206,99 @@ def submit_midterm(db: Session, midterm_id: int, student_id: int) -> MidtermChec
     return MidtermCheckResponse(**_enrich_midterm(midterm))
 
 
-def review_midterm(db: Session, midterm_id: int, data: MidtermReview, reviewer_id: int) -> MidtermCheckResponse:
-    """评审中期检查"""
+def delete_midterm(db: Session, midterm_id: int, current_user: User) -> None:
+    """删除中期检查（管理员可删除任意，学生仅能删除自己的草稿）"""
     midterm = get_midterm_by_id(db, midterm_id)
     if not midterm:
         raise NotFoundException("中期检查不存在")
 
-    if midterm.status not in ["submitted", "rectified"]:
-        raise BusinessException(400, "当前状态不允许评审中期检查")
+    if current_user.role == "student":
+        if midterm.student_id != current_user.id:
+            raise BusinessException(403, "无权删除他人的中期检查")
+        if midterm.status not in ["draft", "failed"]:
+            raise BusinessException(400, "当前状态不允许删除中期检查")
+
+    db.delete(midterm)
+    db.commit()
+
+
+def resubmit_midterm(db: Session, midterm_id: int, current_user: User) -> MidtermCheckResponse:
+    """重交中期检查（管理员可强制重置，学生仅能重交被驳回的）"""
+    midterm = get_midterm_by_id(db, midterm_id)
+    if not midterm:
+        raise NotFoundException("中期检查不存在")
+
+    if current_user.role == "student":
+        if midterm.student_id != current_user.id:
+            raise BusinessException(403, "无权操作他人的中期检查")
+
+    # 重置为草稿状态
+    midterm.status = "draft"
+    midterm.stage = "form"
+    db.commit()
+    db.refresh(midterm)
+    return MidtermCheckResponse(**_enrich_midterm(midterm))
+
+
+def teacher_guidance(db: Session, midterm_id: int, data: MidtermGuidance, current_user: User) -> MidtermCheckResponse:
+    """教师对中期检查表给出指导意见（阶段1）"""
+    midterm = get_midterm_by_id(db, midterm_id)
+    if not midterm:
+        raise NotFoundException("中期检查不存在")
+
+    # 权限校验：教师只能指导自己的学生
+    if current_user.role == "teacher" and midterm.teacher_id != current_user.id:
+        raise BusinessException(403, "无权指导他人学生的中期检查")
+
+    if midterm.status != "form_submitted":
+        raise BusinessException(400, "只有待指导状态的中期检查表才能给出指导意见")
+
+    midterm.teacher_guidance = data.teacher_guidance
+    midterm.guidance_time = datetime.utcnow()
+    midterm.status = "guided"
+    midterm.stage = "form"
+
+    db.commit()
+    db.refresh(midterm)
+    return MidtermCheckResponse(**_enrich_midterm(midterm))
+
+
+def submit_ppt(db: Session, midterm_id: int, data: MidtermPPTSubmit, student_id: int) -> MidtermCheckResponse:
+    """学生提交中期检查演示文稿PPT（阶段2）"""
+    midterm = get_midterm_by_id(db, midterm_id)
+    if not midterm:
+        raise NotFoundException("中期检查不存在")
+
+    if midterm.student_id != student_id:
+        raise BusinessException(403, "无权提交他人的中期检查")
+
+    if midterm.status != "guided":
+        raise BusinessException(400, "只有教师已指导后的中期检查才能提交PPT")
+
+    midterm.ppt_file_id = data.ppt_file_id
+    midterm.ppt_file_path = data.ppt_file_path
+    midterm.ppt_file_name = data.ppt_file_name
+    midterm.status = "ppt_submitted"
+    midterm.stage = "ppt"
+    midterm.submit_time = datetime.utcnow()
+
+    db.commit()
+    db.refresh(midterm)
+    return MidtermCheckResponse(**_enrich_midterm(midterm))
+
+
+def review_midterm(db: Session, midterm_id: int, data: MidtermReview, current_user: User) -> MidtermCheckResponse:
+    """评审中期检查（阶段2，PPT提交后最终评审）"""
+    midterm = get_midterm_by_id(db, midterm_id)
+    if not midterm:
+        raise NotFoundException("中期检查不存在")
+
+    # 权限校验：教师只能评审自己的学生
+    if current_user.role == "teacher" and midterm.teacher_id != current_user.id:
+        raise BusinessException(403, "无权评审他人学生的中期检查")
+
+    if midterm.status not in ["ppt_submitted", "rectified"]:
+        raise BusinessException(400, "只有PPT已提交或整改完成的中期检查才能评审")
 
     if data.teacher_score is not None:
         midterm.teacher_score = data.teacher_score
@@ -216,8 +322,18 @@ def review_midterm(db: Session, midterm_id: int, data: MidtermReview, reviewer_i
 # ==================== 整改管理 ====================
 
 def _enrich_rectification(rect: Rectification) -> dict:
-    """补充整改关联信息"""
-    data = {c.name: getattr(rect, c.name) for c in rect.__table__.columns}
+    """补充整改关联信息，处理数据库 NULL 值"""
+    data = {}
+    for c in rect.__table__.columns:
+        val = getattr(rect, c.name)
+        if val is None:
+            col_type = str(c.type).upper()
+            if 'TEXT' in col_type or 'VARCHAR' in col_type or 'CHAR' in col_type:
+                val = ""
+            elif 'FLOAT' in col_type or 'INT' in col_type or 'DECIMAL' in col_type:
+                val = 0
+            # DATETIME/DATE 保留 None (Optional)
+        data[c.name] = val
     return data
 
 
@@ -376,16 +492,21 @@ def submit_rectification(db: Session, rect_id: int, data: RectificationSubmit, s
     return RectificationResponse(**_enrich_rectification(rect))
 
 
-def review_rectification(db: Session, rect_id: int, data: RectificationReview, reviewer_id: int) -> RectificationResponse:
+def review_rectification(db: Session, rect_id: int, data: RectificationReview, current_user: User) -> RectificationResponse:
     """复检整改"""
     rect = get_rectification_by_id(db, rect_id)
     if not rect:
         raise NotFoundException("整改不存在")
 
+    # 权限校验：教师只能复检自己的学生
+    midterm = get_midterm_by_id(db, rect.midterm_id)
+    if current_user.role == "teacher" and midterm and midterm.teacher_id != current_user.id:
+        raise BusinessException(403, "无权复检他人学生的整改")
+
     if rect.status != "submitted":
         raise BusinessException(400, "当前状态不允许复检")
 
-    rect.reviewer_id = reviewer_id
+    rect.reviewer_id = current_user.id
     rect.review_opinion = data.review_opinion
     rect.review_result = data.review_result
     rect.review_time = datetime.utcnow()

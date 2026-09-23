@@ -133,6 +133,9 @@ def create_or_update_proposal(db: Session, data: ProposalCreate, student_id: int
         references_count=data.references_count,
         references_list=data.references_list,
         word_count=data.word_count,
+        file_id=data.file_id,
+        file_path=data.file_path,
+        file_name=data.file_name,
         status="draft",
     )
     db.add(proposal)
@@ -175,9 +178,50 @@ def submit_proposal(db: Session, proposal_id: int, student_id: int) -> ProposalR
     if proposal.status not in ["draft", "rejected"]:
         raise BusinessException(400, "当前状态不允许提交开题报告")
 
+    # 校验必须上传开题报告文档
+    if not proposal.file_path or not proposal.file_name:
+        raise BusinessException(400, "请先上传开题报告文档后再提交")
+
     proposal.status = "submitted"
     proposal.submit_time = datetime.utcnow()
 
+    db.commit()
+    db.refresh(proposal)
+    return ProposalResponse(**_enrich_proposal(proposal))
+
+
+def delete_proposal(db: Session, proposal_id: int, current_user: User) -> None:
+    """删除开题报告（管理员可删除任意，学生仅能删除自己的草稿/被驳回）"""
+    proposal = get_proposal_by_id(db, proposal_id)
+    if not proposal:
+        raise NotFoundException("开题报告不存在")
+
+    if current_user.role == "student":
+        if proposal.student_id != current_user.id:
+            raise BusinessException(403, "无权删除他人的开题报告")
+        if proposal.status not in ["draft", "rejected"]:
+            raise BusinessException(400, "当前状态不允许删除开题报告")
+
+    db.delete(proposal)
+    db.commit()
+
+
+def resubmit_proposal(db: Session, proposal_id: int, current_user: User) -> ProposalResponse:
+    """重交开题报告（管理员可强制重置为待提交，学生仅能重交自己被驳回的）"""
+    proposal = get_proposal_by_id(db, proposal_id)
+    if not proposal:
+        raise NotFoundException("开题报告不存在")
+
+    if current_user.role == "student":
+        if proposal.student_id != current_user.id:
+            raise BusinessException(403, "无权操作他人的开题报告")
+        if proposal.status != "rejected":
+            raise BusinessException(400, "只有被驳回的开题报告才能重交")
+
+    # 重置为草稿状态，允许重新提交
+    proposal.status = "draft"
+    proposal.review_opinion = ""
+    proposal.review_time = None
     db.commit()
     db.refresh(proposal)
     return ProposalResponse(**_enrich_proposal(proposal))

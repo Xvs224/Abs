@@ -23,7 +23,7 @@ class ThesisVersion(Base):
     file_path = Column(String(255), nullable=False, comment="文件路径")
     file_name = Column(String(255), nullable=False, comment="文件名")
     file_size = Column(Integer, default=0, comment="文件大小（字节）")
-    file_type = Column(String(50), default="", comment="文件类型")
+    file_type = Column(String(255), default="", comment="文件类型")
 
     word_count = Column(Integer, default=0, comment="字数")
     page_count = Column(Integer, default=0, comment="页数")

@@ -25,17 +25,26 @@ class MidtermCheck(Base):
     existing_problems = Column(Text, default="", comment="存在的问题")
     next_plan = Column(Text, default="", comment="下一步计划")
 
-    file_path = Column(String(255), default="", comment="中期报告文件路径")
-    file_name = Column(String(255), default="", comment="文件名")
+    file_path = Column(String(255), default="", comment="中期检查表文件路径")
+    file_name = Column(String(255), default="", comment="中期检查表文件名")
+    file_id = Column(Integer, ForeignKey("uploaded_files.id"), comment="中期检查表文件ID")
+
+    # 演示文稿（PPT）
+    ppt_file_id = Column(Integer, ForeignKey("uploaded_files.id"), comment="PPT文件ID")
+    ppt_file_path = Column(String(255), default="", comment="PPT文件路径")
+    ppt_file_name = Column(String(255), default="", comment="PPT文件名")
 
     # 检查结果
+    stage = Column(String(20), default="form", comment="当前阶段: form中期检查表/ppt演示文稿")
+    teacher_guidance = Column(Text, default="", comment="教师指导意见（阶段1）")
+    guidance_time = Column(DateTime, comment="指导时间")
     teacher_score = Column(Float, default=0.0, comment="指导教师评分")
-    teacher_opinion = Column(Text, default="", comment="指导教师意见")
+    teacher_opinion = Column(Text, default="", comment="指导教师评审意见（最终）")
     check_group_score = Column(Float, default=0.0, comment="检查小组评分")
     check_group_opinion = Column(Text, default="", comment="检查小组意见")
     final_score = Column(Float, default=0.0, comment="最终成绩")
 
-    status = Column(String(20), default="draft", comment="状态: draft草稿/submitted待检查/passed通过/failed未通过/rectifying整改中/rectified已整改")
+    status = Column(String(20), default="draft", comment="状态: draft草稿/form_submitted待指导/guided已指导/ppt_submitted待评审/passed通过/failed未通过/rectifying整改中/rectified已整改")
     submit_time = Column(DateTime, comment="提交时间")
     check_time = Column(DateTime, comment="检查时间")
     create_time = Column(DateTime, server_default=func.now(), comment="创建时间")

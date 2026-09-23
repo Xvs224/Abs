@@ -1,10 +1,12 @@
 """
 统计分析 API
+- 管理员：全局数据
+- 教师：仅看到自己负责的学生相关数据
 """
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, case
 from sqlalchemy.orm import Session
-from typing import Optional
+from datetime import datetime, timedelta
 
 from app.database import get_db
 from app.core.response import success_response
@@ -17,9 +19,20 @@ from app.models.review import Review, Defense
 from app.models.archive import Archive
 from app.models.user import User
 from app.models.anomaly import AnomalyRecord
-from app.models.guidance import GuidanceRecord
 
 router = APIRouter(prefix="/api/stats", tags=["统计分析"])
+
+
+def _get_teacher_student_ids(db: Session, teacher_id: int):
+    """获取教师负责的所有学生ID（通过选题表 teacher_id 关联）"""
+    rows = db.query(Topic.student_id).filter(Topic.teacher_id == teacher_id).distinct().all()
+    return [r[0] for r in rows]
+
+
+def _get_teacher_topic_ids(db: Session, teacher_id: int):
+    """获取教师负责的所有选题ID"""
+    rows = db.query(Topic.id).filter(Topic.teacher_id == teacher_id).all()
+    return [r[0] for r in rows]
 
 
 @router.get("/overview")
@@ -27,49 +40,66 @@ async def get_overview_stats(
     current_user=Depends(require_teacher_or_admin),
     db: Session = Depends(get_db)
 ):
-    """获取概览统计数据"""
-    # 学生总数
-    student_count = db.query(User).filter(User.role == "student", User.status == 1).count()
+    """获取概览统计数据 — 教师仅看自己负责的学生"""
+    is_admin = current_user.role == "admin"
 
-    # 教师总数
-    teacher_count = db.query(User).filter(User.role == "teacher", User.status == 1).count()
+    if is_admin:
+        student_count = db.query(User).filter(User.role == "student", User.status == 1).count()
+        teacher_count = db.query(User).filter(User.role == "teacher", User.status == 1).count()
 
-    # 选题统计
-    topic_total = db.query(Topic).count()
-    topic_approved = db.query(Topic).filter(Topic.status == "approved").count()
-    topic_pending = db.query(Topic).filter(Topic.status == "pending").count()
+        topic_q = db.query(Topic)
+        proposal_q = db.query(Proposal)
+        midterm_q = db.query(MidtermCheck)
+        version_q = db.query(ThesisVersion)
+        review_q = db.query(Review)
+        defense_q = db.query(Defense)
+        archive_q = db.query(Archive)
+        anomaly_q = db.query(AnomalyRecord)
+    else:
+        student_ids = _get_teacher_student_ids(db, current_user.id)
+        topic_ids = _get_teacher_topic_ids(db, current_user.id)
 
-    # 开题统计
-    proposal_total = db.query(Proposal).count()
-    proposal_approved = db.query(Proposal).filter(Proposal.status == "approved").count()
+        student_count = len(student_ids)
+        teacher_count = 1
 
-    # 中期检查统计
-    midterm_total = db.query(MidtermCheck).count()
-    midterm_passed = db.query(MidtermCheck).filter(MidtermCheck.status == "passed").count()
+        topic_q = db.query(Topic).filter(Topic.teacher_id == current_user.id)
+        proposal_q = db.query(Proposal).filter(Proposal.student_id.in_(student_ids)) if student_ids else db.query(Proposal).filter(False)
+        midterm_q = db.query(MidtermCheck).filter(MidtermCheck.student_id.in_(student_ids)) if student_ids else db.query(MidtermCheck).filter(False)
+        version_q = db.query(ThesisVersion).filter(ThesisVersion.topic_id.in_(topic_ids)) if topic_ids else db.query(ThesisVersion).filter(False)
+        review_q = db.query(Review).filter(Review.student_id.in_(student_ids)) if student_ids else db.query(Review).filter(False)
+        defense_q = db.query(Defense).filter(Defense.student_id.in_(student_ids)) if student_ids else db.query(Defense).filter(False)
+        archive_q = db.query(Archive).filter(Archive.student_id.in_(student_ids)) if student_ids else db.query(Archive).filter(False)
+        anomaly_q = db.query(AnomalyRecord).filter(AnomalyRecord.student_id.in_(student_ids)) if student_ids else db.query(AnomalyRecord).filter(False)
 
-    # 论文版本统计
-    version_total = db.query(ThesisVersion).count()
+    topic_total = topic_q.count()
+    topic_approved = topic_q.filter(Topic.status == "approved").count()
+    topic_pending = topic_q.filter(Topic.status == "pending").count()
 
-    # 评阅统计
-    review_total = db.query(Review).count()
-    review_completed = db.query(Review).filter(Review.status == "completed").count()
+    proposal_total = proposal_q.count()
+    proposal_approved = proposal_q.filter(Proposal.status == "approved").count()
 
-    # 答辩统计
-    defense_total = db.query(Defense).count()
-    defense_completed = db.query(Defense).filter(Defense.status == "completed").count()
+    midterm_total = midterm_q.count()
+    midterm_passed = midterm_q.filter(MidtermCheck.status == "passed").count()
 
-    # 归档统计
-    archive_total = db.query(Archive).count()
-    archive_archived = db.query(Archive).filter(Archive.status == "archived").count()
+    version_total = version_q.count()
 
-    # 异常统计
-    anomaly_total = db.query(AnomalyRecord).count()
-    anomaly_L1 = db.query(AnomalyRecord).filter(AnomalyRecord.severity_level == "L1").count()
-    anomaly_L2 = db.query(AnomalyRecord).filter(AnomalyRecord.severity_level == "L2").count()
-    anomaly_L3 = db.query(AnomalyRecord).filter(AnomalyRecord.severity_level == "L3").count()
-    anomaly_pending = db.query(AnomalyRecord).filter(AnomalyRecord.review_status == "pending").count()
+    review_total = review_q.count()
+    review_completed = review_q.filter(Review.status == "completed").count()
+
+    defense_total = defense_q.count()
+    defense_completed = defense_q.filter(Defense.status == "completed").count()
+
+    archive_total = archive_q.count()
+    archive_archived = archive_q.filter(Archive.status == "archived").count()
+
+    anomaly_total = anomaly_q.count()
+    anomaly_L1 = anomaly_q.filter(AnomalyRecord.severity_level == "L1").count()
+    anomaly_L2 = anomaly_q.filter(AnomalyRecord.severity_level == "L2").count()
+    anomaly_L3 = anomaly_q.filter(AnomalyRecord.severity_level == "L3").count()
+    anomaly_pending = anomaly_q.filter(AnomalyRecord.review_status == "pending").count()
 
     data = {
+        "scope": "global" if is_admin else "teacher",
         "users": {
             "student_count": student_count,
             "teacher_count": teacher_count,
@@ -125,11 +155,16 @@ async def get_topic_status_distribution(
     current_user=Depends(require_teacher_or_admin),
     db: Session = Depends(get_db)
 ):
-    """选题状态分布"""
-    results = db.query(
+    """选题状态分布 — 教师仅看自己的选题"""
+    query = db.query(
         Topic.status,
         func.count(Topic.id).label("count")
-    ).group_by(Topic.status).all()
+    )
+
+    if current_user.role != "admin":
+        query = query.filter(Topic.teacher_id == current_user.id)
+
+    results = query.group_by(Topic.status).all()
 
     status_map = {
         "pending": "待审核",
@@ -148,11 +183,10 @@ async def get_topic_status_distribution(
 
 @router.get("/progress-by-department")
 async def get_progress_by_department(
-    current_user=Depends(require_teacher_or_admin),
+    current_user=Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    """各院系进度统计"""
-    # 按院系统计学生数量和各环节完成情况
+    """各院系进度统计 — 仅管理员"""
     students = db.query(User.department, func.count(User.id).label("student_count")) \
         .filter(User.role == "student", User.status == 1) \
         .group_by(User.department).all()
@@ -188,25 +222,28 @@ async def get_anomaly_trend(
     current_user=Depends(require_teacher_or_admin),
     db: Session = Depends(get_db)
 ):
-    """异常检测趋势（近 N 天）"""
-    from datetime import datetime, timedelta
-
+    """异常检测趋势 — 教师仅看自己学生的异常"""
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days - 1)
 
-    # 按天统计
-    results = db.query(
+    query = db.query(
         func.date(AnomalyRecord.detection_time).label("date"),
         AnomalyRecord.severity_level,
         func.count(AnomalyRecord.id).label("count")
-    ).filter(
-        AnomalyRecord.detection_time >= start_date
-    ).group_by(
+    ).filter(AnomalyRecord.detection_time >= start_date)
+
+    if current_user.role != "admin":
+        student_ids = _get_teacher_student_ids(db, current_user.id)
+        if student_ids:
+            query = query.filter(AnomalyRecord.student_id.in_(student_ids))
+        else:
+            query = query.filter(False)
+
+    results = query.group_by(
         func.date(AnomalyRecord.detection_time),
         AnomalyRecord.severity_level
     ).all()
 
-    # 构造完整日期范围
     date_list = [(start_date + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days)]
     trend_data = {}
 
@@ -223,66 +260,39 @@ async def get_anomaly_trend(
     return success_response(data)
 
 
-@router.get("/guidance-stats")
-async def get_guidance_stats(
-    current_user=Depends(require_teacher_or_admin),
-    db: Session = Depends(get_db)
-):
-    """指导统计"""
-    # 总指导次数
-    total_records = db.query(GuidanceRecord).count()
-
-    # 按教师统计
-    teacher_stats = db.query(
-        User.real_name.label("teacher_name"),
-        func.count(GuidanceRecord.id).label("record_count")
-    ).join(
-        GuidanceRecord, GuidanceRecord.teacher_id == User.id
-    ).filter(
-        User.role == "teacher"
-    ).group_by(User.id, User.real_name).order_by(func.count(GuidanceRecord.id).desc()).limit(10).all()
-
-    # 按指导方式统计
-    method_stats = db.query(
-        GuidanceRecord.method,
-        func.count(GuidanceRecord.id).label("count")
-    ).group_by(GuidanceRecord.method).all()
-
-    data = {
-        "total_records": total_records,
-        "teacher_ranking": [
-            {"teacher_name": r.teacher_name, "record_count": r.record_count}
-            for r in teacher_stats
-        ],
-        "method_distribution": [
-            {"method": r.method or "unknown", "count": r.count}
-            for r in method_stats
-        ]
-    }
-
-    return success_response(data)
-
-
 @router.get("/score-distribution")
 async def get_score_distribution(
     current_user=Depends(require_teacher_or_admin),
     db: Session = Depends(get_db)
 ):
-    """成绩分布统计"""
-    # 中期检查成绩分布
-    midterm_scores = db.query(MidtermCheck.final_score).filter(
-        MidtermCheck.status == "passed",
-        MidtermCheck.final_score > 0
-    ).all()
-
-    # 答辩成绩分布
-    defense_scores = db.query(Defense.total_score).filter(
-        Defense.status == "completed",
-        Defense.total_score > 0
-    ).all()
+    """成绩分布统计 — 教师仅看自己学生"""
+    if current_user.role == "admin":
+        midterm_scores = db.query(MidtermCheck.final_score).filter(
+            MidtermCheck.status == "passed",
+            MidtermCheck.final_score > 0
+        ).all()
+        defense_scores = db.query(Defense.total_score).filter(
+            Defense.status == "completed",
+            Defense.total_score > 0
+        ).all()
+    else:
+        student_ids = _get_teacher_student_ids(db, current_user.id)
+        if student_ids:
+            midterm_scores = db.query(MidtermCheck.final_score).filter(
+                MidtermCheck.status == "passed",
+                MidtermCheck.final_score > 0,
+                MidtermCheck.student_id.in_(student_ids)
+            ).all()
+            defense_scores = db.query(Defense.total_score).filter(
+                Defense.status == "completed",
+                Defense.total_score > 0,
+                Defense.student_id.in_(student_ids)
+            ).all()
+        else:
+            midterm_scores = []
+            defense_scores = []
 
     def calc_distribution(scores):
-        """计算成绩分段分布"""
         ranges = [
             {"label": "优秀(90-100)", "min": 90, "max": 100, "count": 0},
             {"label": "良好(80-89)", "min": 80, "max": 89.99, "count": 0},

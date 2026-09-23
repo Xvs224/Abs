@@ -19,6 +19,7 @@ class ThesisVersionCreate(ThesisVersionBase):
     file_name: str
     file_size: Optional[int] = 0
     file_type: Optional[str] = ""
+    version_num: Optional[int] = Field(default=None, description="版本号（1=一稿, 2=二稿, 3=终稿），不传则自动递增")
 
 
 class ThesisVersionUpdate(BaseModel):

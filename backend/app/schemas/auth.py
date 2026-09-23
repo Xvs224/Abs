@@ -14,9 +14,21 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     """登录响应"""
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     expires_in: int
     user: "UserInfo"
+
+
+class RefreshTokenRequest(BaseModel):
+    """刷新令牌请求"""
+    refresh_token: str = Field(..., description="刷新令牌")
+
+
+class LogoutRequest(BaseModel):
+    """登出请求"""
+    access_token: Optional[str] = None
+    refresh_token: Optional[str] = None
 
 
 class TokenPayload(BaseModel):
@@ -33,9 +45,14 @@ class UserInfo(BaseModel):
     username: str
     real_name: str
     role: str
-    email: str
-    department: str
-    avatar: str
+    email: str = ""
+    phone: str = ""
+    department: str = ""
+    student_no: str = ""
+    teacher_no: str = ""
+    grade: str = ""
+    major: str = ""
+    avatar: str = ""
 
     class Config:
         from_attributes = True

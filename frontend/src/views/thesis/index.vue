@@ -9,7 +9,7 @@
         </div>
         <div class="header-actions">
           <el-button type="primary" :icon="Upload" @click="handleUpload">
-            上传新版本
+            {{ filteredVersionList.length > 0 ? '重新上传' : '上传' }}
           </el-button>
           <el-button :icon="RefreshRight" @click="loadList">刷新</el-button>
         </div>
@@ -22,12 +22,30 @@
         <div class="card-header">
           <span>版本历史</span>
           <div class="header-right">
+            <el-select
+              v-if="isTeacher"
+              v-model="filterStudentId"
+              placeholder="全部学生"
+              clearable
+              filterable
+              size="default"
+              style="width: 180px; margin-right: 8px"
+              :loading="studentLoading"
+              @change="loadList"
+            >
+              <el-option
+                v-for="s in studentOptions"
+                :key="s.id"
+                :label="s.real_name"
+                :value="s.id"
+              />
+            </el-select>
             <el-input
               v-model="searchKeyword"
-              placeholder="搜索版本备注"
+              placeholder="搜索论文题目/学生/变更日志"
               clearable
               size="default"
-              style="width: 200px"
+              style="width: 220px"
               @keyup.enter="loadList"
             >
               <template #prefix>
@@ -40,9 +58,9 @@
 
       <el-timeline v-loading="loading">
         <el-timeline-item
-          v-for="(item, index) in versionList"
+          v-for="(item, index) in filteredVersionList"
           :key="item.id"
-          :timestamp="formatTime(item.created_at)"
+          :timestamp="formatTime(item.submit_time)"
           placement="top"
           :type="index === 0 ? 'primary' : 'info'"
           :size="index === 0 ? 'large' : 'normal'"
@@ -51,12 +69,12 @@
             <div class="version-header">
               <div class="version-info">
                 <span class="version-tag" :class="{ latest: index === 0 }">
-                  V{{ item.version_no }}
+                  V{{ item.version_num }}
                   <el-tag v-if="index === 0" type="success" size="small" effect="dark" class="latest-tag">
                     最新版本
                   </el-tag>
                 </span>
-                <span class="version-title">{{ item.title || '未命名版本' }}</span>
+                <span class="version-title">{{ item.version_name || '未命名版本' }}</span>
               </div>
               <div class="version-status">
                 <el-tag :type="formatCheckTagType(item.format_check_status)" size="small">
@@ -76,35 +94,35 @@
               </span>
               <span class="meta-item">
                 <el-icon><User /></el-icon>
-                {{ item.uploader_name || '未知' }}
+                {{ item.student_name || '未知' }}
               </span>
             </div>
 
-            <div class="version-desc" v-if="item.remark">
-              {{ item.remark }}
+            <div class="version-desc" v-if="item.change_log">
+              {{ item.change_log }}
             </div>
 
             <!-- 格式检测结果 -->
-            <div class="format-result" v-if="item.format_check_status === 'completed' && item.format_result">
+            <div class="format-result" v-if="item.format_check_status === 'done' && formatResults[item.id]">
               <el-divider content-position="left">
                 <span class="divider-title">格式检测结果</span>
               </el-divider>
               <div class="format-stats">
                 <div class="stat-item">
-                  <span class="stat-label">总问题数</span>
-                  <span class="stat-value total">{{ item.format_result.total || 0 }}</span>
+                  <span class="stat-label">总得分</span>
+                  <span class="stat-value total">{{ formatResults[item.id].total_score || 0 }}</span>
                 </div>
                 <div class="stat-item">
-                  <span class="stat-label">严重错误</span>
-                  <span class="stat-value error">{{ item.format_result.error || 0 }}</span>
+                  <span class="stat-label">通过项</span>
+                  <span class="stat-value success">{{ formatResults[item.id].passed_count || 0 }}</span>
                 </div>
                 <div class="stat-item">
-                  <span class="stat-label">警告</span>
-                  <span class="stat-value warning">{{ item.format_result.warning || 0 }}</span>
+                  <span class="stat-label">不通过项</span>
+                  <span class="stat-value error">{{ formatResults[item.id].failed_count || 0 }}</span>
                 </div>
                 <div class="stat-item">
-                  <span class="stat-label">建议</span>
-                  <span class="stat-value info">{{ item.format_result.info || 0 }}</span>
+                  <span class="stat-label">总检测项</span>
+                  <span class="stat-value info">{{ formatResults[item.id].total_items || 0 }}</span>
                 </div>
               </div>
               <el-button type="primary" link size="small" @click="viewFormatDetail(item)">
@@ -147,7 +165,7 @@
         </el-timeline-item>
       </el-timeline>
 
-      <el-empty v-if="!loading && versionList.length === 0" description="暂无版本记录" />
+      <el-empty v-if="!loading && filteredVersionList.length === 0" description="暂无版本记录" />
 
       <div class="pagination-wrapper">
         <el-pagination
@@ -166,11 +184,44 @@
     <!-- 上传对话框 -->
     <el-dialog
       v-model="uploadVisible"
-      title="上传新版本"
+      :title="`上传${versionStage === 'draft1' ? '一稿' : versionStage === 'draft2' ? '二稿' : '终审'}`"
       width="500px"
       :close-on-click-modal="false"
     >
       <el-form ref="uploadFormRef" :model="uploadForm" :rules="uploadRules" label-width="80px">
+        <el-form-item v-if="isTeacher" label="学生" prop="student_id">
+          <el-select
+            v-model="uploadForm.student_id"
+            placeholder="请选择学生"
+            filterable
+            style="width: 100%"
+            :loading="studentLoading"
+            @change="onStudentChange"
+          >
+            <el-option
+              v-for="s in studentOptions"
+              :key="s.id"
+              :label="`${s.real_name}（${s.student_no || '—'}）`"
+              :value="s.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="isTeacher" label="论文题目" prop="topic_id">
+          <el-select
+            v-model="uploadForm.topic_id"
+            placeholder="请选择论文题目"
+            filterable
+            style="width: 100%"
+            :loading="topicLoading"
+          >
+            <el-option
+              v-for="t in topicOptions"
+              :key="t.id"
+              :label="t.title"
+              :value="t.id"
+            />
+          </el-select>
+        </el-form-item>
         <el-form-item label="文件">
           <el-upload
             ref="uploadRef"
@@ -195,16 +246,13 @@
             </template>
           </el-upload>
         </el-form-item>
-        <el-form-item label="版本备注" prop="remark">
+        <el-form-item label="变更日志" prop="change_log">
           <el-input
-            v-model="uploadForm.remark"
+            v-model="uploadForm.change_log"
             type="textarea"
             :rows="3"
             placeholder="请输入版本更新说明（选填）"
           />
-        </el-form-item>
-        <el-form-item label="自动检测">
-          <el-switch v-model="uploadForm.auto_check" active-text="上传后自动检测格式" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -224,13 +272,13 @@
       <div class="compare-container">
         <div class="compare-header">
           <div class="compare-version left">
-            <el-tag type="info">V{{ compareVersions[1]?.version_no }}</el-tag>
-            <span class="version-time">{{ formatTime(compareVersions[1]?.created_at) }}</span>
+            <el-tag type="info">V{{ compareVersions[1]?.version_num }}</el-tag>
+            <span class="version-time">{{ formatTime(compareVersions[1]?.submit_time) }}</span>
           </div>
           <el-icon class="compare-icon"><Switch /></el-icon>
           <div class="compare-version right">
-            <el-tag type="primary">V{{ compareVersions[0]?.version_no }}</el-tag>
-            <span class="version-time">{{ formatTime(compareVersions[0]?.created_at) }}</span>
+            <el-tag type="primary">V{{ compareVersions[0]?.version_num }}</el-tag>
+            <span class="version-time">{{ formatTime(compareVersions[0]?.submit_time) }}</span>
           </div>
         </div>
         <div class="compare-content">
@@ -248,25 +296,43 @@
       title="格式检测详情"
       width="700px"
     >
-      <el-table :data="formatIssues" border stripe>
+      <div v-if="formatSummary" class="format-summary-bar">
+        <span>总得分：<b>{{ formatSummary.total_score }}</b> / {{ formatSummary.max_score }}</span>
+        <span>通过项：<b class="text-success">{{ formatSummary.passed_count }}</b></span>
+        <span>不通过项：<b class="text-danger">{{ formatSummary.failed_count }}</b></span>
+      </div>
+      <el-table :data="formatIssues" border stripe v-loading="formatDetailLoading" style="margin-top: 12px;">
         <el-table-column type="index" label="序号" width="60" align="center" />
-        <el-table-column prop="type" label="类型" width="100" align="center">
+        <el-table-column prop="name" label="检测项" min-width="120" />
+        <el-table-column label="结果" width="90" align="center">
           <template #default="{ row }">
-            <el-tag :type="issueTypeTag(row.level)" size="small">
-              {{ issueLevelLabel(row.level) }}
+            <el-tag :type="row.passed ? 'success' : 'danger'" size="small">
+              {{ row.passed ? '通过' : '不通过' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="location" label="位置" width="120" />
-        <el-table-column prop="description" label="问题描述" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="suggestion" label="修改建议" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="message" label="详情" min-width="220" show-overflow-tooltip />
+        <el-table-column label="得分" width="100" align="center">
+          <template #default="{ row }">
+            {{ row.score }} / {{ row.max_score }}
+          </template>
+        </el-table-column>
       </el-table>
+      <div v-if="formatSummary?.problems_summary" class="problems-section">
+        <h4>问题汇总</h4>
+        <p>{{ formatSummary.problems_summary }}</p>
+      </div>
+      <div v-if="formatSummary?.suggestions" class="suggestions-section">
+        <h4>修改建议</h4>
+        <p>{{ formatSummary.suggestions }}</p>
+      </div>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Upload, RefreshRight, Search, Document, Files, User, View, Download,
@@ -274,17 +340,47 @@ import {
 } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import dayjs from 'dayjs'
+import { useUserStore } from '@/store/user'
+
+const route = useRoute()
+const userStore = useUserStore()
+const isTeacher = computed(() => userStore.userInfo?.role === 'teacher')
+// 根据路由确定版本阶段: draft1=一稿, draft2=二稿, final=终审
+const versionStage = computed(() => {
+  if (route.path.includes('/draft2')) return 'draft2'
+  if (route.path.includes('/final')) return 'final'
+  return 'draft1'
+})
+// 当前阶段对应的版本号
+const currentVersionNum = computed(() => ({
+  draft1: 1,
+  draft2: 2,
+  final: 3
+}[versionStage.value]))
 
 const loading = ref(false)
 const uploadVisible = ref(false)
 const uploadLoading = ref(false)
 const compareVisible = ref(false)
 const formatDetailVisible = ref(false)
+const formatDetailLoading = ref(false)
 const uploadFormRef = ref(null)
 const uploadRef = ref(null)
 const searchKeyword = ref('')
+const filterStudentId = ref(null)
 
 const versionList = ref([])
+// 按阶段筛选版本：一稿(v1)、二稿(v2)、终审(v3及以上)
+const filteredVersionList = computed(() => {
+  if (versionStage.value === 'draft1') {
+    return versionList.value.filter(v => v.version_num === 1)
+  } else if (versionStage.value === 'draft2') {
+    return versionList.value.filter(v => v.version_num === 2)
+  } else {
+    return versionList.value.filter(v => v.version_num === 3)
+  }
+})
+const formatResults = reactive({})
 const pagination = reactive({
   page: 1,
   page_size: 10,
@@ -293,22 +389,64 @@ const pagination = reactive({
 
 const fileList = ref([])
 const uploadForm = reactive({
-  remark: '',
-  auto_check: true
+  student_id: null,
+  topic_id: null,
+  change_log: ''
 })
 
 const uploadRules = {
-  remark: []
+  change_log: []
+}
+
+// 学生列表（教师端上传时选择）
+const studentOptions = ref([])
+const studentLoading = ref(false)
+// 选题列表（根据所选学生筛选）
+const topicOptions = ref([])
+const topicLoading = ref(false)
+
+const loadStudents = async () => {
+  studentLoading.value = true
+  try {
+    const res = await request.get('/users', { page: 1, page_size: 100, role: 'student' })
+    studentOptions.value = res.items || res.data || []
+  } catch (error) {
+    console.error('加载学生列表失败:', error)
+  } finally {
+    studentLoading.value = false
+  }
+}
+
+const loadTopicsByStudent = async (studentId) => {
+  if (!studentId) {
+    topicOptions.value = []
+    return
+  }
+  topicLoading.value = true
+  try {
+    const res = await request.get('/topics', { page: 1, page_size: 100, student_id: studentId, status: 'approved' })
+    topicOptions.value = res.items || res.data || []
+    // 自动选中第一个选题
+    if (topicOptions.value.length > 0) {
+      uploadForm.topic_id = topicOptions.value[0].id
+    } else {
+      uploadForm.topic_id = null
+    }
+  } catch (error) {
+    console.error('加载选题列表失败:', error)
+  } finally {
+    topicLoading.value = false
+  }
 }
 
 const compareVersions = ref([])
 const formatIssues = ref([])
+const formatSummary = ref(null)
 
 const formatCheckLabel = (status) => {
   const map = {
     pending: '待检测',
-    checking: '检测中',
-    completed: '检测完成',
+    done: '检测完成',
     failed: '检测失败'
   }
   return map[status] || '未知'
@@ -317,8 +455,7 @@ const formatCheckLabel = (status) => {
 const formatCheckTagType = (status) => {
   const map = {
     pending: 'info',
-    checking: 'warning',
-    completed: 'success',
+    done: 'success',
     failed: 'danger'
   }
   return map[status] || 'info'
@@ -343,16 +480,32 @@ const formatFileSize = (bytes) => {
   return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
 }
 
+const fetchFormatResult = async (item) => {
+  if (formatResults[item.id]) return
+  try {
+    const res = await request.get(`/thesis/versions/${item.id}/format-check`)
+    formatResults[item.id] = res
+  } catch (error) {
+    console.error('获取格式检测结果失败:', error)
+  }
+}
+
 const loadList = async () => {
   loading.value = true
   try {
     const res = await request.get('/thesis/versions', {
       page: pagination.page,
       page_size: pagination.page_size,
-      keyword: searchKeyword.value || undefined
+      keyword: searchKeyword.value || undefined,
+      student_id: filterStudentId.value || undefined
     })
     versionList.value = res.items || res.data || []
     pagination.total = res.total || 0
+    versionList.value.forEach(item => {
+      if (item.format_check_status === 'done') {
+        fetchFormatResult(item)
+      }
+    })
   } catch (error) {
     console.error('加载版本列表失败:', error)
   } finally {
@@ -361,10 +514,16 @@ const loadList = async () => {
 }
 
 const handleUpload = () => {
-  uploadForm.remark = ''
-  uploadForm.auto_check = true
+  uploadForm.student_id = null
+  uploadForm.topic_id = null
+  uploadForm.change_log = ''
   fileList.value = []
+  topicOptions.value = []
   uploadVisible.value = true
+  // 教师端需要加载学生列表
+  if (isTeacher.value) {
+    loadStudents()
+  }
 }
 
 const handleFileChange = (file, fileList) => {
@@ -375,17 +534,38 @@ const handleExceed = () => {
   ElMessage.warning('只能上传一个文件')
 }
 
+// 选择学生后加载其选题
+const onStudentChange = (studentId) => {
+  uploadForm.topic_id = null
+  loadTopicsByStudent(studentId)
+}
+
 const submitUpload = async () => {
   if (fileList.value.length === 0) {
     ElMessage.warning('请选择要上传的文件')
     return
   }
+  // 教师端需要选择学生和选题
+  if (isTeacher.value) {
+    if (!uploadForm.student_id) {
+      ElMessage.warning('请选择学生')
+      return
+    }
+    if (!uploadForm.topic_id) {
+      ElMessage.warning('请选择论文题目')
+      return
+    }
+  }
   try {
     uploadLoading.value = true
     const formData = new FormData()
     formData.append('file', fileList.value[0].raw)
-    formData.append('remark', uploadForm.remark)
-    formData.append('auto_check', uploadForm.auto_check)
+    formData.append('change_log', uploadForm.change_log)
+    formData.append('version_num', currentVersionNum.value)
+    if (isTeacher.value) {
+      formData.append('student_id', uploadForm.student_id)
+      formData.append('topic_id', uploadForm.topic_id)
+    }
     await request.post('/thesis/versions', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
@@ -399,12 +579,42 @@ const submitUpload = async () => {
   }
 }
 
-const handlePreview = (item) => {
-  ElMessage.info(`预览版本 V${item.version_no}`)
+const handlePreview = async (item) => {
+  try {
+    const ext = (item.file_name || '').split('.').pop().toLowerCase()
+    // 仅 PDF 可在浏览器内预览，doc/docx 提示下载
+    if (ext !== 'pdf') {
+      ElMessage.info(`${ext.toUpperCase()} 格式暂不支持在线预览，请下载后查看`)
+      return
+    }
+    const res = await request.download(`/thesis/versions/${item.id}/download`)
+    const blob = new Blob([res.data], { type: 'application/pdf' })
+    const url = URL.createObjectURL(blob)
+    window.open(url, '_blank')
+    setTimeout(() => URL.revokeObjectURL(url), 60000)
+  } catch (error) {
+    console.error('预览失败:', error)
+    ElMessage.error('预览失败，请稍后重试')
+  }
 }
 
-const handleDownload = (item) => {
-  ElMessage.info(`下载版本 V${item.version_no}`)
+const handleDownload = async (item) => {
+  try {
+    const res = await request.download(`/thesis/versions/${item.id}/download`)
+    const blob = new Blob([res.data])
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = item.file_name || `thesis_v${item.version_num}`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    ElMessage.success('下载已开始')
+  } catch (error) {
+    console.error('下载失败:', error)
+    ElMessage.error('下载失败，请稍后重试')
+  }
 }
 
 const handleFormatCheck = async (item) => {
@@ -418,25 +628,29 @@ const handleFormatCheck = async (item) => {
   }
 }
 
-const viewFormatDetail = (item) => {
-  // 模拟数据
-  formatIssues.value = [
-    { level: 'error', location: '第3页 第2段', description: '字体大小不符合要求', suggestion: '将字体大小调整为小四（12pt）' },
-    { level: 'warning', location: '第5页 图3-1', description: '图片未编号或编号格式错误', suggestion: '按照章节编号格式重命名图片' },
-    { level: 'info', location: '第10页 参考文献', description: '参考文献格式建议优化', suggestion: '按照GB/T 7714标准调整格式' },
-    ...(item.format_result?.details || [])
-  ]
+const viewFormatDetail = async (item) => {
   formatDetailVisible.value = true
+  formatDetailLoading.value = true
+  formatIssues.value = []
+  formatSummary.value = null
+  try {
+    const res = await request.get(`/thesis/versions/${item.id}/format-check`)
+    formatIssues.value = Array.isArray(res?.check_items) ? res.check_items : []
+    formatSummary.value = res
+  } catch (error) {
+    console.error('获取格式检测详情失败:', error)
+  } finally {
+    formatDetailLoading.value = false
+  }
 }
 
 const handleCompare = (item) => {
-  // 将当前版本和选中版本进行对比
   compareVersions.value = [versionList.value[0], item]
   compareVisible.value = true
 }
 
 const handleDelete = (item) => {
-  ElMessageBox.confirm(`确定要删除版本 V${item.version_no} 吗？`, '删除确认', {
+  ElMessageBox.confirm(`确定要删除版本 V${item.version_num} 吗？`, '删除确认', {
     confirmButtonText: '确定删除',
     cancelButtonText: '取消',
     type: 'warning'
@@ -452,6 +666,9 @@ const handleDelete = (item) => {
 }
 
 onMounted(() => {
+  if (isTeacher.value) {
+    loadStudents()
+  }
   loadList()
 })
 </script>
@@ -583,6 +800,7 @@ onMounted(() => {
             font-weight: 600;
 
             &.total { color: #303133; }
+            &.success { color: #67c23a; }
             &.error { color: #f56c6c; }
             &.warning { color: #e6a23c; }
             &.info { color: #909399; }
@@ -651,5 +869,40 @@ onMounted(() => {
       }
     }
   }
+
+  .format-summary-bar {
+    display: flex;
+    gap: 24px;
+    padding: 12px 16px;
+    background: #f5f7fa;
+    border-radius: 6px;
+    font-size: 14px;
+    color: #606266;
+
+    b { font-size: 18px; color: #409eff; }
+    .text-success { color: #67c23a; }
+    .text-danger { color: #f56c6c; }
+  }
+
+  .problems-section, .suggestions-section {
+    margin-top: 16px;
+
+    h4 {
+      margin: 0 0 8px;
+      font-size: 14px;
+      color: #303133;
+    }
+
+    p {
+      margin: 0;
+      font-size: 13px;
+      color: #606266;
+      line-height: 1.6;
+      white-space: pre-line;
+    }
+  }
+
+  .problems-section { border-left: 3px solid #f56c6c; padding-left: 12px; }
+  .suggestions-section { border-left: 3px solid #67c23a; padding-left: 12px; }
 }
 </style>

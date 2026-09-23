@@ -22,9 +22,6 @@ logger = logging.getLogger(__name__)
 # 各目标类型对应的可检测特征及说明
 TARGET_FEATURE_MAP: Dict[str, List[Dict[str, str]]] = {
     "student": [
-        {"name": "guidance_count", "label": "指导次数", "direction": "low"},
-        {"name": "avg_guidance_interval_days", "label": "指导间隔天数", "direction": "high"},
-        {"name": "guidance_completion_rate", "label": "指导完成率", "direction": "low"},
         {"name": "progress_percentage", "label": "进度百分比", "direction": "low"},
         {"name": "thesis_version_count", "label": "论文版本数", "direction": "both"},
         {"name": "format_score", "label": "格式得分", "direction": "low"},
@@ -39,12 +36,6 @@ TARGET_FEATURE_MAP: Dict[str, List[Dict[str, str]]] = {
     "proposal": [
         {"name": "proposal_word_count", "label": "开题报告字数", "direction": "both"},
         {"name": "proposal_references_count", "label": "参考文献数量", "direction": "both"},
-    ],
-    "guidance": [
-        {"name": "guidance_count", "label": "指导次数", "direction": "low"},
-        {"name": "avg_guidance_interval_days", "label": "指导间隔天数", "direction": "high"},
-        {"name": "avg_guidance_duration", "label": "平均指导时长", "direction": "low"},
-        {"name": "guidance_completion_rate", "label": "指导完成率", "direction": "low"},
     ],
     "midterm": [
         {"name": "progress_percentage", "label": "进度百分比", "direction": "low"},
@@ -100,7 +91,7 @@ class AnomalyEngine:
         """检测单个目标的异常
 
         Args:
-            target_type: 目标类型 (student/topic/proposal/guidance/midterm/thesis/review)
+            target_type: 目标类型 (student/topic/proposal/midterm/thesis/review)
             target_id: 目标ID
             method: 检测方法 (iqr/isolation_forest/combined)
 
@@ -346,7 +337,8 @@ class AnomalyEngine:
         """评估检测准确性
 
         Args:
-            dataset_type: 数据集类型 (normal/critical/abnormal/all)
+            dataset_type: 数据集类型 (normal/critical/abnormal/all/real)
+                          real = 使用已复核的真实业务数据评估
             method: 检测方法
 
         Returns:
@@ -355,6 +347,11 @@ class AnomalyEngine:
         from app.anomaly.evaluator import AnomalyEvaluator
 
         evaluator = AnomalyEvaluator(self.db)
+
+        # 真实数据评估：基于已人工复核的异常记录
+        if dataset_type == "real":
+            return evaluator.evaluate_with_real_data(method)
+
         return evaluator.evaluate_method(method, dataset_type)
 
     # ==================================================================
@@ -795,17 +792,6 @@ class AnomalyEngine:
             proposals = self.db.query(Proposal).all()
             return [self.feature_extractor.extract_proposal_features(self.db, p.id) for p in proposals]
 
-        elif target_type == "guidance":
-            from app.models.topic import Topic
-            topics = self.db.query(Topic).all()
-            features_list = []
-            for t in topics:
-                feat = self.feature_extractor.extract_guidance_features(self.db, t.id)
-                feat["topic_id"] = t.id
-                feat["student_id"] = t.student_id
-                features_list.append(feat)
-            return features_list
-
         elif target_type == "midterm":
             from app.models.midterm import MidtermCheck
             midterms = self.db.query(MidtermCheck).all()
@@ -856,7 +842,6 @@ class AnomalyEngine:
             "student": "student_id",
             "topic": "topic_id",
             "proposal": "proposal_id",
-            "guidance": "topic_id",
             "midterm": "midterm_id",
             "thesis": "version_id",
             "review": "topic_id",

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.core.response import success_response, page_response
-from app.core.security import get_current_user, require_admin, require_teacher, require_student, require_student_or_teacher
+from app.core.security import get_current_user, require_admin, require_admin_or_teacher, require_teacher_only, require_student, require_student_or_teacher, require_any_authenticated
 from app.schemas.archive import ArchiveCreate, ArchiveUpdate, ArchiveReview, ArchiveResponse
 from app.schemas.common import PaginationParams
 from app.models.user import User
@@ -76,11 +76,22 @@ def update_archive(
 def delete_archive(
     archive_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_student_or_teacher),
+    current_user: User = Depends(require_any_authenticated),
 ):
-    """删除归档"""
+    """删除归档（管理员可删除任意）"""
     archive_service.delete_archive(db, archive_id, current_user)
     return success_response(message="归档删除成功")
+
+
+@router.post("/{archive_id}/resubmit", summary="重交归档")
+def resubmit_archive(
+    archive_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_any_authenticated),
+):
+    """重交归档（管理员可强制重置为待审核，学生仅能重交被退回的）"""
+    result = archive_service.resubmit_archive(db, archive_id, current_user)
+    return success_response(data=result, message="归档已重置，可重新提交")
 
 
 @router.post("/{archive_id}/review", summary="审核归档")
@@ -88,7 +99,7 @@ def review_archive(
     archive_id: int,
     data: ArchiveReview,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_teacher),
+    current_user: User = Depends(require_teacher_only),
 ):
     """教师/管理员审核归档"""
     result = archive_service.review_archive(db, archive_id, data, current_user.id)

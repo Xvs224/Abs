@@ -104,13 +104,17 @@ class UserService:
         self.db.commit()
 
     def list_users(
-        self, pagination: PaginationParams, role: Optional[str] = None
+        self,
+        pagination: PaginationParams,
+        role: Optional[str] = None,
+        teacher_id: Optional[int] = None,
     ) -> Tuple[List[User], int]:
         """
         分页查询用户列表
 
         :param pagination: 分页参数
         :param role: 按角色过滤
+        :param teacher_id: 仅查询该教师指导的学生（教师端学生搜索时使用）
         :return: (用户列表, 总记录数)
         """
         query = self.db.query(User)
@@ -131,6 +135,15 @@ class UserService:
         # 角色过滤
         if role:
             query = query.filter(User.role == role)
+
+        # 仅查询指定教师指导的学生（通过 topics 表关联）
+        if teacher_id:
+            from app.models.topic import Topic
+            query = query.filter(
+                User.id.in_(
+                    self.db.query(Topic.student_id).filter(Topic.teacher_id == teacher_id)
+                )
+            )
 
         # 统计总数
         total = query.count()

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.core.response import success_response, page_response
-from app.core.security import get_current_user, require_teacher, require_student, require_student_or_teacher
+from app.core.security import get_current_user, require_admin_or_teacher, require_teacher_only, require_student, require_student_or_teacher, require_any_authenticated
 from app.schemas.proposal import ProposalCreate, ProposalUpdate, ProposalReview, ProposalSubmit, ProposalResponse
 from app.schemas.common import PaginationParams
 from app.models.user import User
@@ -81,12 +81,34 @@ def submit_proposal(
     return success_response(data=result, message="开题报告提交成功")
 
 
+@router.delete("/{proposal_id}", summary="删除开题报告")
+def delete_proposal(
+    proposal_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_any_authenticated),
+):
+    """删除开题报告（管理员可删除任意，学生仅能删除自己的草稿/被驳回）"""
+    proposal_service.delete_proposal(db, proposal_id, current_user)
+    return success_response(message="开题报告删除成功")
+
+
+@router.post("/{proposal_id}/resubmit", summary="重交开题报告")
+def resubmit_proposal(
+    proposal_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_any_authenticated),
+):
+    """重交开题报告（管理员可强制重置，学生仅能重交被驳回的）"""
+    result = proposal_service.resubmit_proposal(db, proposal_id, current_user)
+    return success_response(data=result, message="开题报告已重置为草稿，可重新提交")
+
+
 @router.post("/{proposal_id}/review", summary="审核开题报告")
 def review_proposal(
     proposal_id: int,
     data: ProposalReview,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_teacher),
+    current_user: User = Depends(require_teacher_only),
 ):
     """教师/管理员审核开题报告"""
     result = proposal_service.review_proposal(db, proposal_id, data, current_user.id)

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.core.response import success_response, page_response, ResponseModel, PageResult
-from app.core.security import get_current_user, require_admin
+from app.core.security import get_current_user, require_admin, require_student_or_teacher
 from app.models.user import User
 from app.schemas.user import (
     UserCreate,
@@ -35,17 +35,23 @@ def list_users(
     sort_by: Optional[str] = Query("id", description="排序字段"),
     sort_order: Optional[str] = Query("desc", description="排序方式: asc/desc"),
     role: Optional[str] = Query(None, description="按角色过滤"),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_student_or_teacher),
     user_service: UserService = Depends(get_user_service),
 ):
     """
     获取用户列表（分页）
 
-    - 需要管理员权限
+    - 管理员可查看所有用户
+    - 教师仅可搜索学生
     - 支持关键词搜索（用户名、真实姓名、邮箱、学号、工号）
     - 支持按角色过滤
     - 支持排序
     """
+    if current_user.role == "teacher":
+        role = "student"
+        teacher_id = current_user.id
+    else:
+        teacher_id = None
     pagination = PaginationParams(
         page=page,
         page_size=page_size,
@@ -53,7 +59,7 @@ def list_users(
         sort_by=sort_by,
         sort_order=sort_order,
     )
-    items, total = user_service.list_users(pagination, role=role)
+    items, total = user_service.list_users(pagination, role=role, teacher_id=teacher_id)
     return page_response(
         items=items,
         total=total,
@@ -97,14 +103,18 @@ def create_user(
 def update_user(
     user_id: int,
     user_data: UserUpdate,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_student_or_teacher),
     user_service: UserService = Depends(get_user_service),
 ):
     """
     更新用户信息
 
-    - 需要管理员权限
+    - 管理员可以更新任意用户
+    - 学生/教师只能更新自己的信息
     """
+    if current_user.role != "admin" and current_user.id != user_id:
+        from app.core.exceptions import ForbiddenException
+        raise ForbiddenException("无权修改他人信息")
     user = user_service.update_user(user_id, user_data)
     return success_response(data=user, message="更新成功")
 

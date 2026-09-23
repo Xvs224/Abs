@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.core.response import success_response, page_response
-from app.core.security import get_current_user, require_admin, require_teacher, require_student_or_teacher
+from app.core.security import get_current_user, require_admin, require_admin_or_teacher, require_teacher_only, require_student_or_teacher
 from app.schemas.review import (
     ReviewCreate, ReviewSubmit, ReviewResponse,
     DefenseCreate, DefenseScore, DefenseResponse,
@@ -53,7 +53,7 @@ def list_reviews(
 def assign_review(
     data: ReviewCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_teacher),
+    current_user: User = Depends(require_teacher_only),
 ):
     """分配评阅任务给评阅教师"""
     result = review_service.assign_review(db, data)
@@ -76,7 +76,7 @@ def submit_review(
     review_id: int,
     data: ReviewSubmit,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_teacher),
+    current_user: User = Depends(require_teacher_only),
 ):
     """评阅教师提交评阅结果"""
     result = review_service.submit_review(db, review_id, data, current_user.id)
@@ -87,9 +87,9 @@ def submit_review(
 def delete_review(
     review_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_teacher),
+    current_user: User = Depends(require_admin_or_teacher),
 ):
-    """删除评阅分配（仅管理员或分配者）"""
+    """删除评阅分配（管理员或教师）"""
     review_service.delete_review(db, review_id)
     return success_response(message="评阅删除成功")
 
@@ -121,7 +121,7 @@ def list_defenses(
 def create_defense(
     data: DefenseCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_teacher),
+    current_user: User = Depends(require_teacher_only),
 ):
     """创建答辩安排"""
     result = review_service.create_defense(db, data)
@@ -144,7 +144,7 @@ def update_defense(
     defense_id: int,
     data: DefenseCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_teacher),
+    current_user: User = Depends(require_teacher_only),
 ):
     """更新答辩安排信息"""
     update_data = data.model_dump(exclude_unset=True)
@@ -156,9 +156,9 @@ def update_defense(
 def delete_defense(
     defense_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_teacher),
+    current_user: User = Depends(require_admin_or_teacher),
 ):
-    """删除答辩安排"""
+    """删除答辩安排（管理员或教师）"""
     review_service.delete_defense(db, defense_id)
     return success_response(message="答辩安排删除成功")
 
@@ -168,7 +168,7 @@ def score_defense(
     defense_id: int,
     data: DefenseScore,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_teacher),
+    current_user: User = Depends(require_teacher_only),
 ):
     """提交答辩评分结果"""
     result = review_service.score_defense(db, defense_id, data)

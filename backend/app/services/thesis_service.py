@@ -16,6 +16,30 @@ from app.schemas.thesis import (
 from app.core.exceptions import NotFoundException, BusinessException
 from app.schemas.common import PaginationParams
 
+# 检测项英文 key → 中文显示名映射
+CHECK_ITEM_NAMES = {
+    "title_format": "标题格式",
+    "abstract_format": "摘要格式",
+    "keywords_format": "关键词格式",
+    "chapter_structure": "章节结构",
+    "references_format": "参考文献格式",
+    "citation_format": "引文标注格式",
+    "figure_table_format": "图表格式",
+    "font_format": "字体格式",
+    "page_layout": "页面布局",
+    "appendix_format": "附录格式",
+}
+
+
+def _check_items_to_list(check_items: dict) -> list:
+    """将检测结果 dict 转为列表，并补充 name 字段（中文显示名）"""
+    result = []
+    for key, item in (check_items or {}).items():
+        row = dict(item)
+        row["name"] = CHECK_ITEM_NAMES.get(key, key)
+        result.append(row)
+    return result
+
 
 def _enrich_version(version: ThesisVersion) -> dict:
     """补充论文版本关联信息"""
@@ -107,15 +131,26 @@ def create_version(db: Session, data: ThesisVersionCreate, student_id: int) -> T
     if topic.student_id != student_id:
         raise BusinessException(403, "无权为他人选题上传论文版本")
 
-    # 获取最新版本号
-    latest = get_latest_version(db, data.topic_id)
-    next_version_num = latest.version_num + 1 if latest else 1
+    # 确定版本号：传入则使用指定版本号（一稿=1, 二稿=2, 终稿=3），否则自动递增
+    if data.version_num is not None:
+        target_version_num = data.version_num
+        # 若该版本号已存在，先删除旧版本（替换）
+        existing = db.query(ThesisVersion).filter(
+            ThesisVersion.topic_id == data.topic_id,
+            ThesisVersion.version_num == target_version_num
+        ).first()
+        if existing:
+            db.delete(existing)
+            db.flush()
+    else:
+        latest = get_latest_version(db, data.topic_id)
+        target_version_num = latest.version_num + 1 if latest else 1
 
     version = ThesisVersion(
         topic_id=data.topic_id,
         student_id=student_id,
-        version_num=next_version_num,
-        version_name=data.version_name or f"V{next_version_num}",
+        version_num=target_version_num,
+        version_name=data.version_name or f"V{target_version_num}",
         change_log=data.change_log,
         file_path=data.file_path,
         file_name=data.file_name,
@@ -155,54 +190,36 @@ def delete_version(db: Session, version_id: int, current_user: User) -> None:
         raise NotFoundException("论文版本不存在")
 
     # 权限校验
-    if current_user.role == "student":
-        if version.student_id != current_user.id:
-            raise BusinessException(403, "无权删除他人的论文版本")
-        # 学生只能删除最新版本
-        latest = get_latest_version(db, version.topic_id)
-        if latest and latest.id != version_id:
-            raise BusinessException(400, "只能删除最新版本的论文")
+    if current_user.role == "student" and version.student_id != current_user.id:
+        raise BusinessException(403, "无权删除他人的论文版本")
 
     db.delete(version)
     db.commit()
 
 
 def run_format_check(db: Session, version_id: int) -> FormatCheckResult:
-    """执行格式检测"""
+    """执行格式检测（调用真实检测引擎）"""
     version = get_version_by_id(db, version_id)
     if not version:
         raise NotFoundException("论文版本不存在")
 
-    # 模拟格式检测（实际项目中应调用格式检测服务）
-    check_items = {
-        "title_format": {"passed": True, "message": "标题格式正确", "score": 10, "max_score": 10},
-        "abstract_format": {"passed": True, "message": "摘要格式规范", "score": 10, "max_score": 10},
-        "keywords_format": {"passed": True, "message": "关键词格式正确", "score": 5, "max_score": 5},
-        "chapter_structure": {"passed": True, "message": "章节结构完整", "score": 15, "max_score": 15},
-        "references_format": {"passed": False, "message": "部分参考文献格式不规范", "score": 8, "max_score": 15},
-        "citation_format": {"passed": True, "message": "引文标注格式正确", "score": 10, "max_score": 10},
-        "figure_table_format": {"passed": False, "message": "部分图表编号不连续", "score": 7, "max_score": 10},
-        "font_format": {"passed": True, "message": "字体字号符合要求", "score": 10, "max_score": 10},
-        "page_layout": {"passed": True, "message": "页面布局规范", "score": 10, "max_score": 10},
-        "appendix_format": {"passed": True, "message": "附录格式正确", "score": 5, "max_score": 5},
-    }
+    if not version.file_path:
+        raise BusinessException(400, "论文版本未关联文件，无法执行格式检测")
 
-    total_score = sum(item["score"] for item in check_items.values())
-    max_score = sum(item["max_score"] for item in check_items.values())
-    passed_count = sum(1 for item in check_items.values() if item["passed"])
-    failed_count = sum(1 for item in check_items.values() if not item["passed"])
-    total_items = len(check_items)
-    overall_result = "pass" if (total_score / max_score) >= 0.7 else "fail"
+    # 调用真实格式检测引擎
+    from app.services.format_checker import run_format_check as _run_check
+    result = _run_check(version.file_path)
 
-    problems = [item["message"] for item in check_items.values() if not item["passed"]]
-    problems_summary = "; ".join(problems) if problems else "无"
-
-    suggestions_list = []
-    if not check_items["references_format"]["passed"]:
-        suggestions_list.append("建议检查参考文献格式，统一使用GB/T 7714标准")
-    if not check_items["figure_table_format"]["passed"]:
-        suggestions_list.append("建议检查图表编号，确保连续且格式统一")
-    suggestions = "\n".join(suggestions_list) if suggestions_list else "格式整体良好，请继续保持"
+    check_items = result["check_items"]
+    total_score = result["total_score"]
+    max_score = result["max_score"]
+    passed_count = result["passed_count"]
+    failed_count = result["failed_count"]
+    total_items = result["total_items"]
+    overall_result = result["overall_result"]
+    problems_summary = result["problems_summary"]
+    suggestions = result["suggestions"]
+    doc_stats = result["document_stats"]
 
     # 保存检测结果
     format_check = FormatCheck(
@@ -226,11 +243,11 @@ def run_format_check(db: Session, version_id: int) -> FormatCheckResult:
     version.format_check_status = "done"
     version.format_score = total_score
 
-    # 更新版本统计信息
-    version.word_count = 8500  # 模拟值
-    version.page_count = 35    # 模拟值
-    version.chapter_count = 6  # 模拟值
-    version.reference_count = 25  # 模拟值
+    # 更新版本统计信息（来自真实文档解析）
+    version.word_count = doc_stats["word_count"]
+    version.page_count = doc_stats["page_count"]
+    version.chapter_count = doc_stats["chapter_count"]
+    version.reference_count = doc_stats["reference_count"]
 
     db.commit()
     db.refresh(format_check)
@@ -245,7 +262,7 @@ def run_format_check(db: Session, version_id: int) -> FormatCheckResult:
         overall_result=overall_result,
         problems_summary=problems_summary,
         suggestions=suggestions,
-        check_items=list(check_items.values()),
+        check_items=_check_items_to_list(check_items),
         check_time=format_check.check_time,
     )
 
@@ -261,7 +278,7 @@ def get_format_check_result(db: Session, version_id: int) -> Optional[FormatChec
 
     check_items_list = []
     if isinstance(check.check_items, dict):
-        check_items_list = list(check.check_items.values())
+        check_items_list = _check_items_to_list(check.check_items)
 
     return FormatCheckResult(
         version_id=check.version_id,

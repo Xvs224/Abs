@@ -57,6 +57,32 @@
       </el-col>
     </el-row>
 
+    <!-- 定时检测调度状态 -->
+    <el-card class="schedule-card" shadow="never" v-if="isAdmin">
+      <div class="schedule-row">
+        <div class="schedule-info">
+          <el-tag :type="scheduleState.enabled ? 'success' : 'info'" size="small">
+            {{ scheduleState.enabled ? '自动检测已启用' : '自动检测已暂停' }}
+          </el-tag>
+          <span class="schedule-text">执行周期：<code>{{ scheduleState.cron }}</code></span>
+          <span class="schedule-text">下次执行：{{ scheduleState.next_run_time || '—' }}</span>
+          <span class="schedule-text" v-if="scheduleState.last_run_time">
+            上次执行：{{ formatTime(scheduleState.last_run_time) }}
+            <span v-if="scheduleState.last_run_result" class="schedule-result">
+              （扫描 {{ scheduleState.last_run_result.total_targets }} 目标，
+              发现 {{ scheduleState.last_run_result.total_anomalies }} 异常）
+            </span>
+          </span>
+        </div>
+        <div class="schedule-actions">
+          <el-button size="small" :icon="VideoPlay" @click="handleTriggerNow">立即检测</el-button>
+          <el-button size="small" @click="handlePauseSchedule" v-if="scheduleState.enabled">暂停</el-button>
+          <el-button size="small" type="primary" @click="handleResumeSchedule" v-else>恢复</el-button>
+          <el-button size="small" @click="showCronDialog = true">配置周期</el-button>
+        </div>
+      </div>
+    </el-card>
+
     <!-- 搜索筛选 -->
     <el-card class="search-card" shadow="never">
       <el-form :inline="true" :model="searchForm" class="search-form">
@@ -77,11 +103,12 @@
         </el-form-item>
         <el-form-item label="类型">
           <el-select v-model="searchForm.type" placeholder="全部类型" clearable style="width: 140px">
-            <el-option label="进度异常" value="progress" />
-            <el-option label="内容重复" value="duplicate" />
-            <el-option label="格式错误" value="format" />
-            <el-option label="提交异常" value="submission" />
-            <el-option label="指导缺失" value="guidance" />
+            <el-option label="选题" value="topic" />
+            <el-option label="开题" value="proposal" />
+            <el-option label="中期" value="midterm" />
+            <el-option label="论文" value="thesis" />
+            <el-option label="评阅" value="review" />
+            <el-option label="学生" value="student" />
           </el-select>
         </el-form-item>
         <el-form-item label="关键词">
@@ -215,18 +242,18 @@
               <el-timeline-item
                 v-for="(item, index) in reviewHistory"
                 :key="index"
-                :timestamp="formatTime(item.reviewed_at)"
+                :timestamp="formatTime(item.review_time)"
                 placement="top"
-                :type="item.review_result === 'confirmed' ? 'success' : item.review_result === 'ignored' ? 'info' : 'warning'"
+                :type="item.result === 'confirmed' ? 'success' : item.result === 'ignored' ? 'info' : 'warning'"
               >
                 <div class="review-item">
                   <div class="reviewer">
                     <strong>{{ item.reviewer_name || '系统' }}</strong>
-                    <el-tag size="small" :type="item.review_result === 'confirmed' ? 'success' : item.review_result === 'ignored' ? 'info' : 'warning'">
-                      {{ reviewResultLabel(item.review_result) }}
+                    <el-tag size="small" :type="item.result === 'confirmed' ? 'success' : item.result === 'ignored' ? 'info' : 'warning'">
+                      {{ reviewResultLabel(item.result) }}
                     </el-tag>
                   </div>
-                  <div class="review-comment" v-if="item.comment">{{ item.comment }}</div>
+                  <div class="review-comment" v-if="item.opinion">{{ item.opinion }}</div>
                 </div>
               </el-timeline-item>
             </el-timeline>
@@ -267,6 +294,27 @@
       </template>
     </el-dialog>
 
+    <!-- 定时检测周期配置对话框 -->
+    <el-dialog v-model="showCronDialog" title="配置定时检测周期" width="480px">
+      <el-form label-width="90px">
+        <el-form-item label="Cron 表达式">
+          <el-input v-model="cronInput" placeholder="如 0 2 * * *">
+            <template #prepend>分 时 日 月 周</template>
+          </el-input>
+          <div class="cron-hint">
+            示例：<el-tag size="small" @click="cronInput = '0 2 * * *'">每天 02:00</el-tag>
+            <el-tag size="small" @click="cronInput = '0 */6 * * *'">每 6 小时</el-tag>
+            <el-tag size="small" @click="cronInput = '0 8,18 * * 1-5'">工作日 8/18 点</el-tag>
+            <el-tag size="small" @click="cronInput = '0 0 * * 1'">每周一 00:00</el-tag>
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showCronDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveCron">保存</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 准确性评估对话框 -->
     <el-dialog
       v-model="evaluateVisible"
@@ -274,36 +322,76 @@
       width="550px"
     >
       <div v-loading="evaluateLoading" class="evaluate-content">
+        <div class="eval-dataset">
+          <el-radio-group v-model="evalDataset" @change="runEvaluation">
+            <el-radio-button value="all">模拟数据（综合）</el-radio-button>
+            <el-radio-button value="real">真实数据（已复核）</el-radio-button>
+          </el-radio-group>
+        </div>
         <template v-if="evaluateResult">
-          <el-row :gutter="20" class="evaluate-stats">
-            <el-col :span="8">
-              <div class="eval-stat">
-                <div class="eval-value">{{ evaluateResult.precision || 0 }}%</div>
-                <div class="eval-label">精确率</div>
-              </div>
-            </el-col>
-            <el-col :span="8">
-              <div class="eval-stat">
-                <div class="eval-value">{{ evaluateResult.recall || 0 }}%</div>
-                <div class="eval-label">召回率</div>
-              </div>
-            </el-col>
-            <el-col :span="8">
-              <div class="eval-stat">
-                <div class="eval-value">{{ evaluateResult.f1_score || 0 }}%</div>
-                <div class="eval-label">F1 分数</div>
-              </div>
-            </el-col>
-          </el-row>
-          <el-descriptions :column="1" border class="mt-20">
-            <el-descriptions-item label="已复核总数">{{ evaluateResult.reviewed_total || 0 }}</el-descriptions-item>
-            <el-descriptions-item label="确认异常数">{{ evaluateResult.true_positive || 0 }}</el-descriptions-item>
-            <el-descriptions-item label="误报数">{{ evaluateResult.false_positive || 0 }}</el-descriptions-item>
-            <el-descriptions-item label="漏报数">{{ evaluateResult.false_negative || 0 }}</el-descriptions-item>
-          </el-descriptions>
+          <!-- 模拟数据：完整指标 -->
+          <template v-if="evaluateResult.evaluation_type !== 'real'">
+            <el-row :gutter="20" class="evaluate-stats">
+              <el-col :span="8">
+                <div class="eval-stat">
+                  <div class="eval-value">{{ Math.round((evaluateResult.precision || 0) * 100) }}%</div>
+                  <div class="eval-label">精确率</div>
+                </div>
+              </el-col>
+              <el-col :span="8">
+                <div class="eval-stat">
+                  <div class="eval-value">{{ Math.round((evaluateResult.recall || 0) * 100) }}%</div>
+                  <div class="eval-label">召回率</div>
+                </div>
+              </el-col>
+              <el-col :span="8">
+                <div class="eval-stat">
+                  <div class="eval-value">{{ Math.round((evaluateResult.f1_score || 0) * 100) }}%</div>
+                  <div class="eval-label">F1 分数</div>
+                </div>
+              </el-col>
+            </el-row>
+            <el-descriptions :column="1" border class="mt-20">
+              <el-descriptions-item label="样本总数">{{ evaluateResult.total_samples || 0 }}</el-descriptions-item>
+              <el-descriptions-item label="确认异常数">{{ evaluateResult.true_positives || 0 }}</el-descriptions-item>
+              <el-descriptions-item label="误报数">{{ evaluateResult.false_positives || 0 }}</el-descriptions-item>
+              <el-descriptions-item label="漏报数">{{ evaluateResult.false_negatives || 0 }}</el-descriptions-item>
+            </el-descriptions>
+          </template>
+          <!-- 真实数据：精确率 + 复核覆盖 + 检出率 -->
+          <template v-else>
+            <el-row :gutter="20" class="evaluate-stats">
+              <el-col :span="8">
+                <div class="eval-stat">
+                  <div class="eval-value">{{ Math.round((evaluateResult.precision || 0) * 100) }}%</div>
+                  <div class="eval-label">精确率</div>
+                </div>
+              </el-col>
+              <el-col :span="8">
+                <div class="eval-stat">
+                  <div class="eval-value">{{ Math.round((evaluateResult.reviewed_rate || 0) * 100) }}%</div>
+                  <div class="eval-label">复核覆盖率</div>
+                </div>
+              </el-col>
+              <el-col :span="8">
+                <div class="eval-stat">
+                  <div class="eval-value">{{ Math.round((evaluateResult.anomaly_rate || 0) * 100) }}%</div>
+                  <div class="eval-label">异常检出率</div>
+                </div>
+              </el-col>
+            </el-row>
+            <el-descriptions :column="1" border class="mt-20">
+              <el-descriptions-item label="检测记录总数">{{ evaluateResult.total_samples || 0 }}</el-descriptions-item>
+              <el-descriptions-item label="已复核数">{{ evaluateResult.reviewed_total || 0 }}</el-descriptions-item>
+              <el-descriptions-item label="确认异常(TP)">{{ evaluateResult.true_positives || 0 }}</el-descriptions-item>
+              <el-descriptions-item label="误报(FP)">{{ evaluateResult.false_positives || 0 }}</el-descriptions-item>
+              <el-descriptions-item label="已处理">{{ evaluateResult.resolved_count || 0 }}</el-descriptions-item>
+              <el-descriptions-item label="待复核">{{ evaluateResult.pending_count || 0 }}</el-descriptions-item>
+            </el-descriptions>
+          </template>
           <div class="eval-note">
             <el-icon><InfoFilled /></el-icon>
-            评估数据基于已人工复核的记录计算
+            {{ evaluateResult.note || (evaluateResult.evaluation_type === 'real' ? '精确率基于已人工复核的记录计算' : '评估数据基于模拟数据集计算') }}
           </div>
         </template>
       </div>
@@ -319,9 +407,14 @@ import {
 } from '@element-plus/icons-vue'
 import {
   getAnomalyList, getAnomalyDetail, getAnomalyStats, getAnomalyReviews,
-  reviewAnomaly, detectAnomaly, evaluateAnomaly
+  reviewAnomaly, detectAnomaly, evaluateAnomaly,
+  getScheduleStatus, updateScheduleCron, pauseSchedule, resumeSchedule, triggerDetectionNow
 } from '@/api/anomaly'
 import dayjs from 'dayjs'
+import { useUserStore } from '@/store/user'
+
+const userStore = useUserStore()
+const isAdmin = userStore.userInfo?.role === 'admin'
 
 const loading = ref(false)
 const detailLoading = ref(false)
@@ -358,22 +451,24 @@ let currentRow = null
 
 const typeLabel = (type) => {
   const map = {
-    progress: '进度异常',
-    duplicate: '内容重复',
-    format: '格式错误',
-    submission: '提交异常',
-    guidance: '指导缺失'
+    topic: '选题',
+    proposal: '开题',
+    midterm: '中期',
+    thesis: '论文',
+    review: '评阅',
+    student: '学生'
   }
   return map[type] || type
 }
 
 const typeTagType = (type) => {
   const map = {
-    progress: 'warning',
-    duplicate: 'danger',
-    format: 'info',
-    submission: 'warning',
-    guidance: 'primary'
+    topic: 'primary',
+    proposal: 'success',
+    midterm: 'info',
+    thesis: 'danger',
+    review: 'primary',
+    student: 'warning'
   }
   return map[type] || 'info'
 }
@@ -382,6 +477,7 @@ const statusLabel = (status) => {
   const map = {
     pending: '待复核',
     confirmed: '已确认',
+    false_positive: '误报',
     ignored: '已忽略',
     resolved: '已处理'
   }
@@ -392,6 +488,7 @@ const statusTagType = (status) => {
   const map = {
     pending: 'warning',
     confirmed: 'danger',
+    false_positive: 'info',
     ignored: 'info',
     resolved: 'success'
   }
@@ -401,6 +498,7 @@ const statusTagType = (status) => {
 const reviewResultLabel = (result) => {
   const map = {
     confirmed: '确认异常',
+    false_positive: '误报',
     ignored: '忽略误报',
     resolved: '已处理'
   }
@@ -426,7 +524,7 @@ const loadList = async () => {
       page_size: pagination.page_size,
       severity_level: searchForm.severity_level || undefined,
       review_status: searchForm.review_status || undefined,
-      type: searchForm.type || undefined,
+      target_type: searchForm.type || undefined,
       keyword: searchForm.keyword || undefined
     })
     tableData.value = res.items || res.data || []
@@ -481,7 +579,10 @@ const handleReview = (row) => {
 const submitReview = async () => {
   try {
     reviewLoading.value = true
-    await reviewAnomaly(currentRow.id, reviewForm)
+    await reviewAnomaly(currentRow.id, {
+      result: reviewForm.review_result,
+      opinion: reviewForm.comment
+    })
     ElMessage.success('复核提交成功')
     reviewVisible.value = false
     loadList()
@@ -505,12 +606,23 @@ const handleDetect = async () => {
   }
 }
 
-const handleEvaluate = async () => {
+const handleEvaluate = () => {
+  evalDataset.value = 'all'
   evaluateVisible.value = true
+  runEvaluation()
+}
+
+// 评估数据集：all(模拟) / real(真实已复核)
+const evalDataset = ref('all')
+
+const runEvaluation = async () => {
   evaluateLoading.value = true
   evaluateResult.value = null
   try {
-    const res = await evaluateAnomaly({})
+    const res = await evaluateAnomaly({
+      dataset_type: evalDataset.value,
+      detection_method: 'combined'
+    })
     evaluateResult.value = res
   } catch (error) {
     console.error('评估失败:', error)
@@ -519,9 +631,80 @@ const handleEvaluate = async () => {
   }
 }
 
+// ==================== 定时检测调度 ====================
+const scheduleState = reactive({
+  enabled: false,
+  cron: '',
+  timezone: '',
+  running: false,
+  last_run_time: null,
+  last_run_result: null,
+  next_run_time: null,
+  run_count: 0
+})
+const showCronDialog = ref(false)
+const cronInput = ref('')
+
+const loadSchedule = async () => {
+  if (!isAdmin) return
+  try {
+    const res = await getScheduleStatus()
+    Object.assign(scheduleState, res)
+  } catch (e) {
+    console.error('获取调度状态失败:', e)
+  }
+}
+
+const handleTriggerNow = async () => {
+  try {
+    await triggerDetectionNow()
+    ElMessage.success('已触发全量检测，将在后台执行')
+    // 3 秒后刷新状态和列表
+    setTimeout(() => { loadSchedule(); loadStats(); loadList() }, 3000)
+  } catch (e) {
+    console.error('触发失败:', e)
+  }
+}
+
+const handlePauseSchedule = async () => {
+  try {
+    const res = await pauseSchedule()
+    Object.assign(scheduleState, res)
+    ElMessage.success('定时检测已暂停')
+  } catch (e) {
+    console.error('暂停失败:', e)
+  }
+}
+
+const handleResumeSchedule = async () => {
+  try {
+    const res = await resumeSchedule()
+    Object.assign(scheduleState, res)
+    ElMessage.success('定时检测已恢复')
+  } catch (e) {
+    console.error('恢复失败:', e)
+  }
+}
+
+const saveCron = async () => {
+  if (!cronInput.value.trim()) {
+    ElMessage.warning('请输入 cron 表达式')
+    return
+  }
+  try {
+    const res = await updateScheduleCron(cronInput.value.trim())
+    Object.assign(scheduleState, res)
+    showCronDialog.value = false
+    ElMessage.success('调度周期已更新')
+  } catch (e) {
+    console.error('更新周期失败:', e)
+  }
+}
+
 onMounted(() => {
   loadStats()
   loadList()
+  loadSchedule()
 })
 </script>
 
@@ -585,6 +768,63 @@ onMounted(() => {
         width: 100%;
       }
     }
+  }
+
+  .schedule-card {
+    margin-bottom: 16px;
+
+    .schedule-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .schedule-info {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+
+      .schedule-text {
+        font-size: 13px;
+        color: #606266;
+
+        code {
+          background: #f5f7fa;
+          padding: 2px 6px;
+          border-radius: 4px;
+          color: #409eff;
+          font-size: 12px;
+        }
+      }
+
+      .schedule-result {
+        color: #909399;
+        font-size: 12px;
+      }
+    }
+
+    .schedule-actions {
+      display: flex;
+      gap: 8px;
+    }
+  }
+
+  .cron-hint {
+    margin-top: 8px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+
+    .el-tag {
+      cursor: pointer;
+    }
+  }
+
+  .eval-dataset {
+    margin-bottom: 16px;
   }
 
   .level-tag {

@@ -14,7 +14,6 @@ from app.core.security import hash_password
 from app.models.user import User
 from app.models.topic import Topic
 from app.models.proposal import Proposal
-from app.models.guidance import GuidancePlan, GuidanceRecord
 from app.models.midterm import MidtermCheck, Rectification
 from app.models.thesis import ThesisVersion, FormatCheck
 from app.models.review import Review, Defense
@@ -82,15 +81,11 @@ def generate_mock_data(student_count: int = 50):
         proposals = _generate_proposals(db, topics)
         print(f"生成开题报告: {len(proposals)} 个")
 
-        # 5. 生成指导计划和记录
-        plans, records = _generate_guidance(db, topics, teachers)
-        print(f"生成指导计划: {len(plans)} 个, 指导记录: {len(records)} 条")
-
-        # 6. 生成中期检查
+        # 5. 生成中期检查
         midterms, rectifications = _generate_midterm(db, topics)
         print(f"生成中期检查: {len(midterms)} 个, 整改记录: {len(rectifications)} 条")
 
-        # 7. 生成论文版本和格式检测
+        # 6. 生成论文版本和格式检测
         versions, format_checks = _generate_thesis_versions(db, topics)
         print(f"生成论文版本: {len(versions)} 个, 格式检测记录: {len(format_checks)} 条")
 
@@ -271,64 +266,6 @@ def _generate_proposals(db, topics):
 
     db.flush()
     return proposals
-
-
-def _generate_guidance(db, topics, teachers):
-    """生成指导计划和记录"""
-    plans = []
-    records = []
-
-    approved_topics = [t for t in topics if t.status == "approved"]
-
-    for topic in approved_topics:
-        # 创建指导计划
-        plan = GuidancePlan(
-            topic_id=topic.id,
-            teacher_id=topic.teacher_id,
-            student_id=topic.student_id,
-            plan_name="毕业论文指导计划",
-            total_times=random.randint(8, 15),
-            frequency=random.choice(["每周1次", "每两周1次", "每周2次"]),
-            plan_content="按照毕业论文进度安排，分阶段进行指导，确保学生按时完成各阶段任务。",
-            start_date=datetime.now().date() - timedelta(days=random.randint(60, 90)),
-            end_date=datetime.now().date() + timedelta(days=random.randint(10, 30)),
-            status=random.choice(["active", "active", "completed"]),
-        )
-        db.add(plan)
-        plans.append(plan)
-        db.flush()
-
-        # 生成指导记录
-        record_count = random.randint(3, plan.total_times)
-        base_date = datetime.now() - timedelta(days=60)
-        methods = ["online", "offline", "meeting"]
-        record_types = ["regular", "regular", "regular", "urgent"]
-
-        for j in range(record_count):
-            record_date = base_date + timedelta(days=j * random.randint(5, 10))
-            if record_date > datetime.now():
-                break
-
-            record = GuidanceRecord(
-                plan_id=plan.id,
-                topic_id=topic.id,
-                teacher_id=topic.teacher_id,
-                student_id=topic.student_id,
-                record_type=random.choice(record_types),
-                method=random.choice(methods),
-                location=random.choice(["线上会议", "教研室", "实验室", "腾讯会议"]),
-                duration=random.randint(30, 120),
-                content=f"第{j+1}次指导：讨论了研究进展，针对存在的问题提出了改进建议。",
-                teacher_opinion="学生进展顺利，能够按照计划推进研究工作。建议加快实验进度。",
-                student_task=f"完成第{j+1}阶段任务，准备下次指导汇报。",
-                next_guidance_date=record_date.date() + timedelta(days=random.randint(5, 10)),
-                record_time=record_date,
-            )
-            db.add(record)
-            records.append(record)
-
-    db.flush()
-    return plans, records
 
 
 def _generate_midterm(db, topics):
@@ -608,8 +545,6 @@ def _generate_anomaly_records(db, topics, students):
 
     # 生成各种类型的异常记录
     anomaly_types = [
-        ("guidance", "指导频次过低", "L2"),
-        ("guidance", "指导间隔过长", "L1"),
         ("midterm", "进度严重滞后", "L3"),
         ("midterm", "整改不力", "L2"),
         ("thesis", "格式不达标", "L1"),

@@ -131,7 +131,7 @@ def assign_review(db: Session, data: ReviewCreate) -> ReviewResponse:
         review_type=data.review_type,
         version_id=data.version_id,
         deadline=data.deadline,
-        status="pending",
+        status="reviewing",
     )
     db.add(review)
     db.commit()
@@ -148,7 +148,7 @@ def submit_review(db: Session, review_id: int, data: ReviewSubmit, reviewer_id: 
     if review.reviewer_id != reviewer_id:
         raise BusinessException(403, "无权提交他人的评阅")
 
-    if review.status != "pending":
+    if review.status != "reviewing":
         raise BusinessException(400, "该评阅已完成，不可重复提交")
 
     review.topic_score = data.topic_score

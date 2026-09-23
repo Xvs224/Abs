@@ -19,6 +19,9 @@ class MidtermCheckBase(BaseModel):
 class MidtermCheckCreate(MidtermCheckBase):
     """创建中期检查请求"""
     topic_id: int
+    file_id: Optional[int] = None
+    file_path: Optional[str] = ""
+    file_name: Optional[str] = ""
 
 
 class MidtermCheckUpdate(BaseModel):
@@ -29,12 +32,28 @@ class MidtermCheckUpdate(BaseModel):
     progress_percentage: Optional[float] = None
     existing_problems: Optional[str] = None
     next_plan: Optional[str] = None
+    file_id: Optional[int] = None
     file_path: Optional[str] = None
     file_name: Optional[str] = None
+    ppt_file_id: Optional[int] = None
+    ppt_file_path: Optional[str] = None
+    ppt_file_name: Optional[str] = None
+
+
+class MidtermGuidance(BaseModel):
+    """教师指导请求（阶段1）"""
+    teacher_guidance: str = Field(..., min_length=1, description="教师指导意见")
+
+
+class MidtermPPTSubmit(BaseModel):
+    """学生提交PPT请求"""
+    ppt_file_id: int
+    ppt_file_path: str
+    ppt_file_name: str
 
 
 class MidtermReview(BaseModel):
-    """中期检查评审请求"""
+    """中期检查最终评审请求（阶段2）"""
     teacher_score: Optional[float] = None
     teacher_opinion: Optional[str] = ""
     check_group_score: Optional[float] = None
@@ -54,8 +73,15 @@ class MidtermCheckResponse(MidtermCheckBase):
     topic_id: int
     student_id: int
     teacher_id: Optional[int] = None
+    file_id: Optional[int] = None
     file_path: str = ""
     file_name: str = ""
+    ppt_file_id: Optional[int] = None
+    ppt_file_path: str = ""
+    ppt_file_name: str = ""
+    stage: str = "form"
+    teacher_guidance: str = ""
+    guidance_time: Optional[datetime] = None
     teacher_score: float = 0.0
     teacher_opinion: str = ""
     check_group_score: float = 0.0

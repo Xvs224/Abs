@@ -14,7 +14,7 @@ class AnomalyRecord(Base):
 
     id = Column(Integer, primary_key=True, index=True, comment="异常记录ID")
 
-    target_type = Column(String(50), nullable=False, index=True, comment="检测对象类型: topic/proposal/guidance/midterm/thesis/review/student")
+    target_type = Column(String(50), nullable=False, index=True, comment="检测对象类型: topic/proposal/midterm/thesis/review/student")
     target_id = Column(Integer, nullable=False, index=True, comment="检测对象ID")
     student_id = Column(Integer, ForeignKey("users.id"), index=True, comment="关联学生ID")
     topic_id = Column(Integer, ForeignKey("topics.id"), index=True, comment="关联选题ID")

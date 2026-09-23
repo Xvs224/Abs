@@ -21,6 +21,9 @@ class ProposalBase(BaseModel):
 class ProposalCreate(ProposalBase):
     """创建开题报告请求"""
     topic_id: int
+    file_id: Optional[int] = Field(default=None, description="上传文件ID")
+    file_path: Optional[str] = Field(default="", description="文件路径")
+    file_name: Optional[str] = Field(default="", description="文件名")
 
 
 class ProposalUpdate(BaseModel):
@@ -33,6 +36,7 @@ class ProposalUpdate(BaseModel):
     references_count: Optional[int] = None
     references_list: Optional[str] = None
     word_count: Optional[int] = None
+    file_id: Optional[int] = None
     file_path: Optional[str] = None
     file_name: Optional[str] = None
 
@@ -54,6 +58,7 @@ class ProposalResponse(ProposalBase):
     topic_id: int
     student_id: int
     teacher_id: Optional[int] = None
+    file_id: Optional[int] = None
     file_path: str = ""
     file_name: str = ""
     status: str

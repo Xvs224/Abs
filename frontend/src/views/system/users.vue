@@ -67,8 +67,8 @@
           <template #default="{ row }">
             <el-switch
               v-model="row.status"
-              active-value="active"
-              inactive-value="disabled"
+              :active-value="1"
+              :inactive-value="0"
               :active-text="''"
               :inactive-text="''"
               size="small"
@@ -367,7 +367,7 @@ const handleResetPassword = (row) => {
 }
 
 const handleStatusChange = (row, status) => {
-  const action = status === 'active' ? '启用' : '禁用'
+  const action = status === 1 ? '启用' : '禁用'
   ElMessageBox.confirm(`确定要${action}用户 "${row.username}" 吗？`, '操作确认', {
     confirmButtonText: `确认${action}`,
     cancelButtonText: '取消',
@@ -379,11 +379,11 @@ const handleStatusChange = (row, status) => {
     } catch (error) {
       console.error('操作失败:', error)
       // 回滚状态
-      row.status = status === 'active' ? 'disabled' : 'active'
+      row.status = status === 1 ? 0 : 1
     }
   }).catch(() => {
     // 回滚状态
-    row.status = status === 'active' ? 'disabled' : 'active'
+    row.status = status === 1 ? 0 : 1
   })
 }
 

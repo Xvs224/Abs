@@ -6,9 +6,10 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.core.response import success_response, page_response
-from app.core.security import get_current_user, require_teacher, require_student, require_student_or_teacher
+from app.core.security import get_current_user, require_admin_or_teacher, require_teacher_only, require_student, require_student_or_teacher, require_any_authenticated
 from app.schemas.midterm import (
     MidtermCheckCreate, MidtermCheckUpdate, MidtermReview, MidtermSubmit, MidtermCheckResponse,
+    MidtermGuidance, MidtermPPTSubmit,
     RectificationCreate, RectificationSubmit, RectificationReview, RectificationResponse,
 )
 from app.schemas.common import PaginationParams
@@ -74,16 +75,40 @@ def update_midterm(
     return success_response(data=result, message="中期检查更新成功")
 
 
-@router.post("/{midterm_id}/submit", summary="提交中期检查")
+@router.post("/{midterm_id}/submit", summary="提交中期检查表")
 def submit_midterm(
     midterm_id: int,
     data: MidtermSubmit = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_student),
 ):
-    """学生提交中期检查待评审"""
+    """学生提交中期检查表（阶段1），等待教师指导"""
     result = midterm_service.submit_midterm(db, midterm_id, current_user.id)
-    return success_response(data=result, message="中期检查提交成功")
+    return success_response(data=result, message="中期检查表提交成功")
+
+
+@router.post("/{midterm_id}/guidance", summary="教师指导")
+def teacher_guidance(
+    midterm_id: int,
+    data: MidtermGuidance,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_teacher_only),
+):
+    """教师对中期检查表给出指导意见（阶段1）"""
+    result = midterm_service.teacher_guidance(db, midterm_id, data, current_user)
+    return success_response(data=result, message="指导意见已提交")
+
+
+@router.post("/{midterm_id}/submit-ppt", summary="提交中期检查PPT")
+def submit_ppt(
+    midterm_id: int,
+    data: MidtermPPTSubmit,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_student),
+):
+    """学生提交中期检查演示文稿PPT（阶段2）"""
+    result = midterm_service.submit_ppt(db, midterm_id, data, current_user.id)
+    return success_response(data=result, message="PPT提交成功")
 
 
 @router.post("/{midterm_id}/review", summary="评审中期检查")
@@ -91,10 +116,10 @@ def review_midterm(
     midterm_id: int,
     data: MidtermReview,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_teacher),
+    current_user: User = Depends(require_teacher_only),
 ):
-    """教师/管理员评审中期检查"""
-    result = midterm_service.review_midterm(db, midterm_id, data, current_user.id)
+    """教师评审中期检查（阶段2，PPT提交后最终评审）"""
+    result = midterm_service.review_midterm(db, midterm_id, data, current_user)
     return success_response(data=result, message="评审完成")
 
 
@@ -118,7 +143,7 @@ def list_rectifications(
 def create_rectification(
     data: RectificationCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_teacher),
+    current_user: User = Depends(require_teacher_only),
 ):
     """教师创建整改要求"""
     result = midterm_service.create_rectification(db, data, current_user)
@@ -141,7 +166,7 @@ def update_rectification(
     rect_id: int,
     data: RectificationCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_teacher),
+    current_user: User = Depends(require_teacher_only),
 ):
     """更新整改信息"""
     update_data = data.model_dump(exclude_unset=True)
@@ -153,7 +178,7 @@ def update_rectification(
 def delete_rectification(
     rect_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_teacher),
+    current_user: User = Depends(require_teacher_only),
 ):
     """删除整改"""
     midterm_service.delete_rectification(db, rect_id, current_user)
@@ -177,8 +202,30 @@ def review_rectification(
     rect_id: int,
     data: RectificationReview,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_teacher),
+    current_user: User = Depends(require_teacher_only),
 ):
     """教师复检整改结果"""
-    result = midterm_service.review_rectification(db, rect_id, data, current_user.id)
+    result = midterm_service.review_rectification(db, rect_id, data, current_user)
     return success_response(data=result, message="复检完成")
+
+
+@router.delete("/{midterm_id}", summary="删除中期检查")
+def delete_midterm(
+    midterm_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_any_authenticated),
+):
+    """删除中期检查（管理员可删除任意，学生仅能删除自己的草稿）"""
+    midterm_service.delete_midterm(db, midterm_id, current_user)
+    return success_response(message="中期检查删除成功")
+
+
+@router.post("/{midterm_id}/resubmit", summary="重交中期检查")
+def resubmit_midterm(
+    midterm_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_any_authenticated),
+):
+    """重交中期检查（管理员可强制重置为草稿）"""
+    result = midterm_service.resubmit_midterm(db, midterm_id, current_user)
+    return success_response(data=result, message="中期检查已重置为草稿，可重新提交")
