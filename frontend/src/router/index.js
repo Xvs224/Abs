@@ -52,6 +52,12 @@ const routes = [
         meta: { title: '中期检查', icon: 'CircleCheck', roles: ['admin', 'teacher'] }
       },
       {
+        path: 'guidance',
+        name: 'Guidance',
+        component: () => import('@/views/teacher/guidance.vue'),
+        meta: { title: '过程指导', icon: 'ChatDotRound', roles: ['admin', 'teacher'] }
+      },
+      {
         path: 'thesis',
         name: 'Thesis',
         redirect: '/thesis/draft1',
@@ -126,6 +132,12 @@ const routes = [
             name: 'Logs',
             component: () => import('@/views/system/logs.vue'),
             meta: { title: '操作日志', icon: 'List', roles: ['admin'] }
+          },
+          {
+            path: 'stages',
+            name: 'Stages',
+            component: () => import('@/views/system/stages.vue'),
+            meta: { title: '阶段时间设定', icon: 'Timer', roles: ['admin'] }
           }
         ]
       }

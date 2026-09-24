@@ -31,6 +31,10 @@
           <el-icon><CircleCheck /></el-icon>
           <template #title>中期检查</template>
         </el-menu-item>
+        <el-menu-item index="/student/guidance">
+          <el-icon><ChatDotRound /></el-icon>
+          <template #title>过程指导</template>
+        </el-menu-item>
         <el-sub-menu index="/student/thesis">
           <template #title>
             <el-icon><DocumentCopy /></el-icon>
@@ -66,10 +70,6 @@
         <el-menu-item index="/student/archives">
           <el-icon><Box /></el-icon>
           <template #title>成果归档</template>
-        </el-menu-item>
-        <el-menu-item index="/student/profile">
-          <el-icon><User /></el-icon>
-          <template #title>个人中心</template>
         </el-menu-item>
       </el-menu>
     </div>
@@ -132,17 +132,17 @@ const router = useRouter()
 const userStore = useUserStore()
 const collapsed = ref(false)
 
-// 学生端主题变量（清新、活力的青绿色系）
+// 学生端主题变量（清新浅色主题 - 柔和蓝绿色系）
 const themeVars = {
-  primary: '#0d9488',
-  primaryLight: '#14b8a6',
-  primaryLighter: '#ccfbf1',
-  sidebarBg: '#134e4a',
-  sidebarLogoBg: '#042f2e',
-  sidebarText: '#ccfbf1',
-  sidebarActiveText: '#5eead4',
-  sidebarActiveBg: 'rgba(20, 184, 166, 0.2)',
-  logoColor: '#5eead4',
+  primary: '#0ea5e9',
+  primaryLight: '#38bdf8',
+  primaryLighter: '#e0f2fe',
+  sidebarBg: '#ffffff',
+  sidebarLogoBg: '#f8fafc',
+  sidebarText: '#64748b',
+  sidebarActiveText: '#0ea5e9',
+  sidebarActiveBg: '#e0f2fe',
+  logoColor: '#0ea5e9',
 }
 
 const activeMenu = computed(() => route.path)
@@ -152,6 +152,7 @@ const menuTitles = {
   '/student/topics': '选题确认',
   '/student/proposals': '开题报告',
   '/student/midterm': '中期检查',
+  '/student/guidance': '过程指导',
   '/student/thesis': '论文版本',
   '/student/reviews': '评阅答辩',
   '/student/anomaly': '异常提示',
@@ -181,25 +182,25 @@ onMounted(() => {
 
 <style scoped lang="scss">
 .student-layout {
-  /* 学生端主题令牌 - 清新青绿色系 */
-  --primary: #0d9488;
-  --primary-light: #14b8a6;
-  --primary-lighter: #ccfbf1;
-  --sidebar-bg: #134e4a;
-  --sidebar-logo-bg: #042f2e;
-  --sidebar-text: #ccfbf1;
-  --sidebar-active-text: #5eead4;
-  --sidebar-active-bg: rgba(20, 184, 166, 0.2);
-  --sidebar-hover-bg: rgba(255, 255, 255, 0.06);
+  /* 学生端主题令牌 - 清新浅色主题 */
+  --primary: #0ea5e9;
+  --primary-light: #38bdf8;
+  --primary-lighter: #e0f2fe;
+  --sidebar-bg: #ffffff;
+  --sidebar-logo-bg: #f8fafc;
+  --sidebar-text: #64748b;
+  --sidebar-active-text: #0ea5e9;
+  --sidebar-active-bg: #e0f2fe;
+  --sidebar-hover-bg: #f1f5f9;
 
-  /* 覆盖 Element Plus 主色为学生端青绿 */
-  --el-color-primary: #0d9488;
-  --el-color-primary-light-3: #3da39a;
-  --el-color-primary-light-5: #6db8b0;
-  --el-color-primary-light-7: #9ecdc7;
-  --el-color-primary-light-8: #b6d8d4;
-  --el-color-primary-light-9: #cee8e5;
-  --el-color-primary-dark-2: #0a766d;
+  /* 覆盖 Element Plus 主色为学生端天蓝 */
+  --el-color-primary: #0ea5e9;
+  --el-color-primary-light-3: #38bdf8;
+  --el-color-primary-light-5: #7dd3fc;
+  --el-color-primary-light-7: #bae6fd;
+  --el-color-primary-light-8: #e0f2fe;
+  --el-color-primary-light-9: #f0f9ff;
+  --el-color-primary-dark-2: #0284c7;
 
   display: flex;
   height: 100vh;
@@ -209,10 +210,12 @@ onMounted(() => {
 .sidebar {
   width: var(--sidebar-width);
   background: var(--sidebar-bg);
+  border-right: 1px solid #e2e8f0;
   transition: width 0.3s;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.03);
 
   &.collapsed {
     width: var(--sidebar-collapsed-width);
@@ -225,11 +228,12 @@ onMounted(() => {
     justify-content: center;
     gap: 10px;
     background: var(--sidebar-logo-bg);
-    color: #fff;
+    color: var(--primary);
     font-size: 15px;
     font-weight: 600;
     white-space: nowrap;
     overflow: hidden;
+    border-bottom: 1px solid #e2e8f0;
   }
 
   .sidebar-menu {
@@ -240,6 +244,9 @@ onMounted(() => {
       height: 50px;
       line-height: 50px;
       transition: var(--transition-base);
+      margin: 4px 12px;
+      border-radius: 8px;
+      width: auto;
 
       &:hover {
         background-color: var(--sidebar-hover-bg) !important;
@@ -248,7 +255,19 @@ onMounted(() => {
 
     :deep(.el-menu-item.is-active) {
       background-color: var(--sidebar-active-bg) !important;
-      border-right: 3px solid var(--sidebar-active-text);
+      color: var(--sidebar-active-text) !important;
+      font-weight: 600;
+    }
+
+    :deep(.el-sub-menu__title) {
+      margin: 4px 12px;
+      border-radius: 8px;
+      height: 50px;
+      line-height: 50px;
+
+      &:hover {
+        background-color: var(--sidebar-hover-bg) !important;
+      }
     }
   }
 }

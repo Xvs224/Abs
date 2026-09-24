@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.models.archive import Archive
 from app.models.topic import Topic
 from app.models.user import User
-from app.models.review import Defense
+from app.models.review import Review, Defense
 from app.schemas.archive import ArchiveCreate, ArchiveUpdate, ArchiveReview, ArchiveResponse
 from app.core.exceptions import NotFoundException, BusinessException, ConflictException
 from app.schemas.common import PaginationParams
@@ -125,6 +125,16 @@ def create_archive(db: Session, data: ArchiveCreate, student_id: int) -> Archive
     if existing:
         raise ConflictException("该选题已有归档记录")
 
+    # 检查答辩是否通过：仅答辩通过才可归档
+    defense = db.query(Defense).filter(Defense.topic_id == data.topic_id).first()
+    if not defense:
+        raise BusinessException(400, "该选题尚未安排答辩，无法进行成果归档")
+    if defense.status != "completed":
+        raise BusinessException(400, "答辩尚未完成，无法进行成果归档")
+    if defense.result != "pass":
+        result_txt = {"pass": "通过", "fail": "未通过", "reargue": "需重新答辩"}.get(defense.result, defense.result)
+        raise BusinessException(400, f"答辩结果为「{result_txt}」，需答辩通过后才可进行成果归档")
+
     archive = Archive(
         topic_id=data.topic_id,
         student_id=student_id,
@@ -133,6 +143,18 @@ def create_archive(db: Session, data: ArchiveCreate, student_id: int) -> Archive
         status="pending",
     )
     db.add(archive)
+    db.flush()
+
+    # 自动从评阅记录和答辩记录中同步归档材料文件
+    # 评阅意见书（存储文件路径，供下载使用）
+    review = db.query(Review).filter(Review.topic_id == data.topic_id).order_by(Review.id.desc()).first()
+    if review and review.review_file_path:
+        archive.review_file = review.review_file_path
+    # 答辩记录（存储文件路径，供下载使用）
+    defense = db.query(Defense).filter(Defense.topic_id == data.topic_id).first()
+    if defense and defense.defense_file_path:
+        archive.defense_file = defense.defense_file_path
+
     db.commit()
     db.refresh(archive)
     return ArchiveResponse(**_enrich_archive(archive, db))
@@ -150,6 +172,12 @@ def update_archive(db: Session, archive_id: int, data: ArchiveUpdate, current_us
             raise BusinessException(403, "无权修改他人的归档")
         if archive.status not in ["pending", "returned"]:
             raise BusinessException(400, "当前状态不允许修改归档")
+        # 退回后重新提交时，再次校验答辩是否通过
+        if archive.status == "returned":
+            defense = db.query(Defense).filter(Defense.topic_id == archive.topic_id).first()
+            if not defense or defense.status != "completed" or defense.result != "pass":
+                result_txt = {"pass": "通过", "fail": "未通过", "reargue": "需重新答辩"}.get(defense.result if defense else "", "无")
+                raise BusinessException(400, f"答辩结果为「{result_txt}」，需答辩通过后才可进行成果归档")
 
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():

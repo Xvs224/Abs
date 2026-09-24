@@ -20,6 +20,16 @@ export function submitReview(id, data) {
   return request.post(`/reviews/${id}/submit`, data)
 }
 
+// 修改评阅结果
+export function updateReview(id, data) {
+  return request.put(`/reviews/${id}`, data)
+}
+
+// 删除评阅
+export function deleteReview(id) {
+  return request.delete(`/reviews/${id}`)
+}
+
 // 获取答辩列表
 export function getDefenseList(params) {
   return request.get('/defenses', params)
@@ -43,4 +53,9 @@ export function updateDefense(id, data) {
 // 提交答辩评分
 export function scoreDefense(id, data) {
   return request.post(`/defenses/${id}/score`, data)
+}
+
+// 删除答辩安排
+export function deleteDefense(id) {
+  return request.delete(`/defenses/${id}`)
 }

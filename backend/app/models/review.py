@@ -32,6 +32,11 @@ class Review(Base):
     suggestions = Column(Text, default="", comment="修改建议")
     result = Column(String(20), default="", comment="评阅结果: pass通过/revision需修改/reject不通过")
 
+    # 评阅意见书文件
+    review_file_id = Column(Integer, ForeignKey("uploaded_files.id"), comment="评阅意见书文件ID")
+    review_file_path = Column(String(255), default="", comment="评阅意见书文件路径")
+    review_file_name = Column(String(255), default="", comment="评阅意见书文件名")
+
     review_time = Column(DateTime, comment="评阅时间")
     deadline = Column(DateTime, comment="评阅截止时间")
     status = Column(String(20), default="pending", comment="状态: pending待评阅/completed已完成")
@@ -78,6 +83,11 @@ class Defense(Base):
     opinion = Column(Text, default="", comment="答辩意见")
     suggestions = Column(Text, default="", comment="修改建议")
     result = Column(String(20), default="", comment="答辩结果: pass通过/fail不通过/reargue二次答辩")
+
+    # 答辩记录文件
+    defense_file_id = Column(Integer, ForeignKey("uploaded_files.id"), comment="答辩记录文件ID")
+    defense_file_path = Column(String(255), default="", comment="答辩记录文件路径")
+    defense_file_name = Column(String(255), default="", comment="答辩记录文件名")
 
     # 二次答辩相关
     re_defense_date = Column(Date, comment="二次答辩日期")

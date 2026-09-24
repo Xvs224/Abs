@@ -158,6 +158,8 @@ from app.api.anomaly import router as anomaly_router
 from app.api.stats import router as stats_router
 from app.api.logs import router as logs_router
 from app.api.files import router as files_router
+from app.api.stages import router as stages_router
+from app.api.guidance import router as guidance_router
 
 app.include_router(auth_router, tags=["认证"])
 app.include_router(users_router, tags=["用户管理"])
@@ -171,6 +173,8 @@ app.include_router(anomaly_router, tags=["异常检测"])
 app.include_router(stats_router, tags=["统计分析"])
 app.include_router(logs_router, tags=["操作日志"])
 app.include_router(files_router, tags=["文件管理"])
+app.include_router(stages_router, tags=["阶段时间配置"])
+app.include_router(guidance_router, tags=["过程指导"])
 
 
 @app.get("/", tags=["根路径"])

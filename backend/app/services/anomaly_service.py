@@ -120,12 +120,142 @@ class AnomalyService:
         }
 
     def run_full_detection(self) -> Dict[str, Any]:
-        """运行全量检测
+        """运行全量检测（IQR + Isolation Forest + 规则类检测）"""
+        from app.anomaly.rule_detector import detect_rules_batch
 
-        Returns:
-            全量检测结果
+        ml_result = self.engine.run_full_detection()
+
+        rule_items = detect_rules_batch(self.db)
+        rule_saved = self._save_rule_items(rule_items)
+
+        return {
+            "ml_detection": ml_result,
+            "rule_detection": {
+                "total": len(rule_items),
+                "saved": rule_saved,
+                "algorithm": "rule",
+            },
+        }
+
+    def run_rule_detection(self) -> Dict[str, Any]:
+        """单独跑规则类检测"""
+        from app.anomaly.rule_detector import detect_rules_batch
+        items = detect_rules_batch(self.db)
+        saved = self._save_rule_items(items)
+        return {"total": len(items), "saved": saved, "algorithm": "rule"}
+
+    def trigger_for_student(self, student_id: int, clear_old: bool = False) -> Dict[str, Any]:
+        """实时触发单个学生的异常检测（IQR + 规则），供业务提交后钩子调用。"""
+        from app.anomaly.rule_detector import detect_rules_for_student
+        from app.models.anomaly import AnomalyRecord
+
+        if clear_old:
+            self.db.query(AnomalyRecord).filter(
+                AnomalyRecord.student_id == student_id,
+                AnomalyRecord.review_status == "pending",
+            ).delete()
+            self.db.commit()
+
+        # 规则类
+        rule_items = detect_rules_for_student(self.db, student_id)
+        rule_saved = self._save_rule_items(rule_items)
+
+        # IQR/IF 类
+        ml_result = {"total": 0, "saved": 0}
+        try:
+            ml_result = self.engine.detect_target("student", student_id, method="combined")
+        except Exception as e:
+            logger.warning(f"trigger_for_student ml detect error: {e}")
+
+        return {
+            "student_id": student_id,
+            "rule_saved": rule_saved,
+            "ml_result": ml_result,
+        }
+
+    def _save_rule_items(self, items: List[Dict[str, Any]]) -> int:
+        """批量保存规则类异常记录。
+
+        去重策略：同一天内相同 (target_type, target_id, feature_name) 的异常
+        只保留一条（更新 detection_time），跨天则新建记录。
+        同时补全 feature_data 和 topic_id 字段。
         """
-        return self.engine.run_full_detection()
+        from app.models.anomaly import AnomalyRecord
+        count = 0
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+        for item in items:
+            target_type = item.get("target_type")
+            target_id = item.get("target_id")
+            feature_name = item.get("feature_name")
+            student_id = item.get("student_id")
+
+            # 回填 topic_id：根据 student_id 查询选题
+            topic_id = item.get("topic_id")
+            if not topic_id and student_id:
+                topic = self.db.query(Topic).filter(
+                    Topic.student_id == student_id
+                ).first()
+                if topic:
+                    topic_id = topic.id
+
+            # 构建 feature_data：汇总规则检测的上下文信息
+            feature_data = {
+                "student_id": student_id,
+                "topic_id": topic_id,
+                "teacher_id": item.get("teacher_id"),
+                "feature_name": feature_name,
+                "feature_value": item.get("feature_value"),
+                "anomaly_score": item.get("anomaly_score"),
+                "severity_level": item.get("severity_level"),
+                "description": item.get("description"),
+                "suggestion": item.get("suggestion"),
+                "detection_method": "rule",
+            }
+
+            # 按天去重：同一天内同特征只存一条，更新时间；跨天则新建
+            existing = self.db.query(AnomalyRecord).filter(
+                AnomalyRecord.target_type == target_type,
+                AnomalyRecord.target_id == target_id,
+                AnomalyRecord.feature_name == feature_name,
+                AnomalyRecord.review_status == "pending",
+                AnomalyRecord.detection_time >= today_start,
+            ).first()
+
+            if existing:
+                # 同天已存在，更新特征值与检测时间
+                existing.feature_value = item.get("feature_value", existing.feature_value)
+                existing.anomaly_score = item.get("anomaly_score", existing.anomaly_score)
+                existing.feature_data = feature_data
+                existing.detection_time = datetime.now()
+                if topic_id and not existing.topic_id:
+                    existing.topic_id = topic_id
+                continue
+
+            rec = AnomalyRecord(
+                target_type=target_type,
+                target_id=target_id,
+                student_id=student_id,
+                topic_id=topic_id,
+                detection_type="rule",
+                feature_name=feature_name,
+                feature_value=item.get("feature_value"),
+                feature_data=feature_data,
+                anomaly_score=item.get("anomaly_score", 0.5),
+                severity_level=item.get("severity_level", "L1"),
+                description=item.get("description", ""),
+                suggestion=item.get("suggestion", ""),
+                review_status="pending",
+                detection_time=datetime.now(),
+            )
+            self.db.add(rec)
+            count += 1
+
+        if count:
+            self.db.commit()
+        else:
+            self.db.commit()  # 提交更新
+        return count
 
     def evaluate_detection(
         self,
@@ -560,14 +690,21 @@ class AnomalyService:
             if student:
                 student_name = student.real_name
 
-        # 获取选题信息
+        # 获取选题信息及指导教师
         topic_title = ""
+        teacher_name = ""
         if record.topic_id:
             topic = self.db.query(Topic).filter(
                 Topic.id == record.topic_id
             ).first()
             if topic:
                 topic_title = topic.title
+                if topic.teacher_id:
+                    teacher = self.db.query(User).filter(
+                        User.id == topic.teacher_id
+                    ).first()
+                    if teacher:
+                        teacher_name = teacher.real_name
 
         # 获取复核人信息
         reviewer_name = ""
@@ -581,6 +718,30 @@ class AnomalyService:
         # 复核次数
         review_count = len(record.reviews) if record.reviews else 0
 
+        # 构建异常详情：汇总特征数据、建议等
+        detail_parts = []
+        if record.feature_name:
+            detail_parts.append(f"异常特征：{record.feature_name}（值：{record.feature_value}）")
+        if record.suggestion:
+            detail_parts.append(f"处理建议：{record.suggestion}")
+        # 附加特征数据（排除已展示的字段）
+        if record.feature_data and isinstance(record.feature_data, dict):
+            extra_features = []
+            skip_keys = {"student_id", "topic_id", "student_name", "topic_title", record.feature_name}
+            for k, v in record.feature_data.items():
+                if k not in skip_keys and v is not None:
+                    extra_features.append(f"{k}: {v}")
+            if extra_features:
+                detail_parts.append("相关特征：" + "；".join(extra_features))
+        detail_text = "\n".join(detail_parts) if detail_parts else ""
+
+        # 数据来源：检测方法 + 目标类型
+        method_map = {"iqr": "IQR统计检测", "isolation_forest": "孤立森林检测", "combined": "综合检测", "rule": "规则检测"}
+        type_map = {"topic": "选题", "proposal": "开题", "midterm": "中期", "thesis": "论文", "review": "评阅", "student": "学生", "defense": "答辩", "archive": "归档"}
+        method_text = method_map.get(record.detection_type, record.detection_type or "自动检测")
+        type_text = type_map.get(record.target_type, record.target_type or "")
+        data_source = f"{method_text}-{type_text}" if type_text else method_text
+
         return {
             "id": record.id,
             "target_type": record.target_type,
@@ -591,6 +752,7 @@ class AnomalyService:
             "related_student": student_name,
             "topic_id": record.topic_id,
             "topic_title": topic_title,
+            "related_teacher": teacher_name,
             "detection_type": record.detection_type,
             "feature_name": record.feature_name,
             "feature_value": record.feature_value,
@@ -600,6 +762,8 @@ class AnomalyService:
             "confidence": record.confidence,
             "description": record.description,
             "suggestion": record.suggestion,
+            "detail": detail_text,
+            "data_source": data_source,
             "review_status": record.review_status,
             "reviewer_id": record.reviewer_id,
             "reviewer_name": reviewer_name,

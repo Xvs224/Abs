@@ -35,9 +35,14 @@ export function getAnomalyStats() {
   return request.get('/anomaly/stats')
 }
 
-// 准确性评估
-export function evaluateAnomaly(data) {
-  return request.post('/anomaly/evaluate', data)
+// 准确性评估（仅真实数据）
+export function evaluateAnomaly() {
+  return request.post('/anomaly/evaluate')
+}
+
+// 删除异常记录
+export function deleteAnomalyRecord(id) {
+  return request.delete(`/anomaly/records/${id}`)
 }
 
 // ============ 定时检测调度管理 ============

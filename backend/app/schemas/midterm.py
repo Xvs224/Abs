@@ -98,6 +98,7 @@ class MidtermCheckResponse(MidtermCheckBase):
     student_name: Optional[str] = ""
     teacher_name: Optional[str] = ""
     rectification_count: Optional[int] = 0
+    pending_review_count: Optional[int] = 0
 
     class Config:
         from_attributes = True
@@ -121,6 +122,8 @@ class RectificationSubmit(BaseModel):
     rectification_content: str
     rectification_file_path: Optional[str] = ""
     rectification_file_name: Optional[str] = ""
+    rectification_ppt_path: Optional[str] = ""
+    rectification_ppt_name: Optional[str] = ""
 
 
 class RectificationReview(BaseModel):
@@ -137,6 +140,8 @@ class RectificationResponse(RectificationBase):
     rectification_content: str = ""
     rectification_file_path: str = ""
     rectification_file_name: str = ""
+    rectification_ppt_path: str = ""
+    rectification_ppt_name: str = ""
     submit_time: Optional[datetime] = None
     reviewer_id: Optional[int] = None
     review_opinion: str = ""

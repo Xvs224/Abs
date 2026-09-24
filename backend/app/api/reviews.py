@@ -6,9 +6,9 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.core.response import success_response, page_response
-from app.core.security import get_current_user, require_admin, require_admin_or_teacher, require_teacher_only, require_student_or_teacher
+from app.core.security import get_current_user, require_admin, require_admin_or_teacher, require_teacher_only, require_student_or_teacher, require_student_only
 from app.schemas.review import (
-    ReviewCreate, ReviewSubmit, ReviewResponse,
+    ReviewCreate, ReviewSubmit, ReviewResponse, ReviewApply,
     DefenseCreate, DefenseScore, DefenseResponse,
 )
 from app.schemas.common import PaginationParams
@@ -60,6 +60,17 @@ def assign_review(
     return success_response(data=result, message="评阅分配成功")
 
 
+@review_router.post("/apply", summary="学生申请评阅")
+def apply_review(
+    data: ReviewApply,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_student_only),
+):
+    """学生申请论文评阅（首次申请或评阅不通过/需修改后再次申请）"""
+    result = review_service.apply_review(db, data, current_user.id)
+    return success_response(data=result, message="评阅申请已提交，请等待评阅教师评阅")
+
+
 @review_router.get("/{review_id}", summary="评阅详情")
 def get_review(
     review_id: int,
@@ -83,14 +94,26 @@ def submit_review(
     return success_response(data=result, message="评阅提交成功")
 
 
+@review_router.put("/{review_id}", summary="修改评阅结果")
+def update_review(
+    review_id: int,
+    data: ReviewSubmit,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_teacher),
+):
+    """修改评阅结果（管理员或评阅教师，可修改已完成的评阅）"""
+    result = review_service.update_review(db, review_id, data, current_user.id, current_user.role)
+    return success_response(data=result, message="评阅修改成功")
+
+
 @review_router.delete("/{review_id}", summary="删除评阅分配")
 def delete_review(
     review_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_teacher),
 ):
-    """删除评阅分配（管理员或教师）"""
-    review_service.delete_review(db, review_id)
+    """删除评阅分配（管理员可删除所有；教师不可删除已完成的评阅）"""
+    review_service.delete_review(db, review_id, current_user.role)
     return success_response(message="评阅删除成功")
 
 
@@ -144,7 +167,7 @@ def update_defense(
     defense_id: int,
     data: DefenseCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_teacher_only),
+    current_user: User = Depends(require_admin_or_teacher),
 ):
     """更新答辩安排信息"""
     update_data = data.model_dump(exclude_unset=True)
@@ -158,8 +181,8 @@ def delete_defense(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_teacher),
 ):
-    """删除答辩安排（管理员或教师）"""
-    review_service.delete_defense(db, defense_id)
+    """删除答辩安排（管理员可删除所有；教师不可删除已完成的答辩）"""
+    review_service.delete_defense(db, defense_id, current_user.role)
     return success_response(message="答辩安排删除成功")
 
 
@@ -168,11 +191,21 @@ def score_defense(
     defense_id: int,
     data: DefenseScore,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_teacher_only),
+    current_user: User = Depends(require_admin_or_teacher),
 ):
     """提交答辩评分结果"""
     result = review_service.score_defense(db, defense_id, data)
     return success_response(data=result, message="答辩评分完成")
+
+
+@defense_router.post("/apply-redefense", summary="申请再次答辩")
+def apply_redefense(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_student_only),
+):
+    """学生申请再次答辩（答辩结果为需重新答辩时）"""
+    result = review_service.apply_redefense(db, current_user.id)
+    return success_response(data=result, message="再次答辩申请已提交，请等待教师安排答辩")
 
 
 # 合并到主路由

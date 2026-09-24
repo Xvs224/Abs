@@ -13,6 +13,7 @@ from app.config import settings
 from app.database import get_db
 from app.core.response import success_response, page_response
 from app.core.security import get_current_user, require_admin_or_teacher, require_teacher_only, require_student, require_student_or_teacher
+from app.core.stage_gate import raise_if_locked
 from app.schemas.thesis import (
     ThesisVersionCreate, ThesisVersionUpdate, ThesisVersionResponse,
     FormatCheckResult, VersionCompareResponse,
@@ -60,6 +61,7 @@ async def create_version(
     current_user: User = Depends(require_student_or_teacher),
 ):
     """上传新的论文版本（学生上传自己的，教师可代学生上传）"""
+    raise_if_locked(db, "thesis_final", current_user.role)
     # 校验文件大小
     content = await file.read()
     file_size = len(content)

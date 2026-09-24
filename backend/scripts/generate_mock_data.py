@@ -243,7 +243,6 @@ def _generate_proposals(db, topics):
             status = "rejected"
 
         word_count = random.randint(2000, 8000)
-        ref_count = random.randint(10, 40)
 
         proposal = Proposal(
             topic_id=topic.id,
@@ -254,8 +253,6 @@ def _generate_proposals(db, topics):
             technical_route="从需求分析出发，经过系统设计、编码实现、测试验证等阶段，最终完成系统开发。",
             expected_results="预期完成一个完整的原型系统，并发表相关学术论文1-2篇。",
             schedule_plan="第1-2周：选题与资料收集；第3-4周：开题报告；第5-8周：系统设计；第9-12周：编码实现；第13-14周：测试与优化；第15-16周：论文撰写与答辩。",
-            references_count=ref_count,
-            references_list="参考文献列表...",
             word_count=word_count,
             status=status,
             submit_time=topic.submit_time + timedelta(days=random.randint(7, 14)),

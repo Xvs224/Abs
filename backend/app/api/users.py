@@ -48,8 +48,13 @@ def list_users(
     - 支持排序
     """
     if current_user.role == "teacher":
-        role = "student"
-        teacher_id = current_user.id
+        # 教师默认只能查看学生，但显式请求 role=teacher 时允许查看教师列表
+        # （用于选择答辩委员会、答辩秘书、评阅教师等场景）
+        if role == "teacher":
+            teacher_id = None
+        else:
+            role = "student"
+            teacher_id = current_user.id
     else:
         teacher_id = None
     pagination = PaginationParams(

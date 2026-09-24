@@ -38,6 +38,10 @@ def _enrich_midterm(midterm: MidtermCheck) -> dict:
     data["student_name"] = midterm.student.real_name if midterm.student else ""
     data["teacher_name"] = midterm.teacher.real_name if midterm.teacher else ""
     data["rectification_count"] = len(midterm.rectifications) if midterm.rectifications else 0
+    data["pending_review_count"] = (
+        sum(1 for r in midterm.rectifications if r.status == "submitted")
+        if midterm.rectifications else 0
+    )
     return data
 
 
@@ -484,6 +488,8 @@ def submit_rectification(db: Session, rect_id: int, data: RectificationSubmit, s
     rect.rectification_content = data.rectification_content
     rect.rectification_file_path = data.rectification_file_path
     rect.rectification_file_name = data.rectification_file_name
+    rect.rectification_ppt_path = data.rectification_ppt_path
+    rect.rectification_ppt_name = data.rectification_ppt_name
     rect.submit_time = datetime.utcnow()
     rect.status = "submitted"
 

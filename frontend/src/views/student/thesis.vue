@@ -1,10 +1,11 @@
 <template>
   <div class="student-thesis">
-    <el-card shadow="never">
+    <StageBanner :module-key="thesisModuleKey" />
+<el-card shadow="never">
       <template #header>
         <div class="page-header">
           <span>{{ stageTitle }}</span>
-          <el-button type="primary" :icon="Upload" @click="openUpload">
+          <el-button type="primary" :icon="Upload" @click="openUpload" :disabled="isLocked">
             {{ filteredVersions.length > 0 ? '重新上传' : '上传' }}
           </el-button>
         </div>
@@ -49,16 +50,16 @@
               </div>
 
               <div class="version-actions">
-                <el-button text type="primary" @click="handleFormatCheck(item)" v-if="item.format_check_status === 'pending'">
+                <el-button text type="primary" @click="handleFormatCheck(item)" :disabled="isLocked" v-if="item.format_check_status === 'pending'">
                   格式检测
                 </el-button>
                 <el-button text type="primary" @click="viewFormatDetail(item)" v-if="item.format_check_status !== 'pending'">
                   查看检测报告
                 </el-button>
-                <el-button text type="warning" @click="openUpload">
+                <el-button text type="warning" @click="openUpload" :disabled="isLocked">
                   修改
                 </el-button>
-                <el-button text type="danger" :icon="Delete" @click="handleDelete(item)">
+                <el-button text type="danger" :icon="Delete" @click="handleDelete(item)" :disabled="isLocked">
                   删除
                 </el-button>
               </div>
@@ -66,7 +67,7 @@
           </el-timeline-item>
         </el-timeline>
         <el-empty v-if="!loading && filteredVersions.length === 0" :description="`暂无${stageTitle}，请上传`">
-          <el-button type="primary" @click="openUpload">上传{{ stageTitle }}</el-button>
+          <el-button type="primary" @click="openUpload" :disabled="isLocked">上传{{ stageTitle }}</el-button>
         </el-empty>
       </div>
     </el-card>
@@ -96,7 +97,7 @@
       </el-form>
       <template #footer>
         <el-button @click="uploadVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleUpload" :loading="uploading">上传</el-button>
+        <el-button type="primary" @click="handleUpload" :loading="uploading" :disabled="isLocked">上传</el-button>
       </template>
     </el-dialog>
 
@@ -159,7 +160,9 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, UploadFilled, Delete } from '@element-plus/icons-vue'
+import StageBanner from '@/views/common/StageBanner.vue'
 import studentApi from '@/api/student'
+import { useStageLock } from '@/composables/useStageLock'
 
 const route = useRoute()
 // 根据路由确定版本阶段: draft1=一稿, draft2=二稿, final=终审
@@ -168,6 +171,13 @@ const versionStage = computed(() => {
   if (route.path.includes('/final')) return 'final'
   return 'draft1'
 })
+// 阶段时间配置 module_key 映射
+const thesisModuleKey = computed(() => ({
+  draft1: 'thesis_draft',
+  draft2: 'thesis_revision',
+  final: 'thesis_final',
+}[versionStage.value]))
+const { isLocked } = useStageLock(thesisModuleKey)
 const stageTitle = computed(() => ({
   draft1: '论文一稿',
   draft2: '论文二稿',

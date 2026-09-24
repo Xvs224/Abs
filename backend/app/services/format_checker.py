@@ -36,6 +36,49 @@ def _extract_all_text(doc) -> str:
     return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
 
 
+def _extract_pdf_text(file_path: str) -> str:
+    """从 PDF 文件提取全部文本"""
+    try:
+        import pymupdf as fitz  # PyMuPDF
+    except ImportError:
+        try:
+            import fitz  # 兼容旧版 PyMuPDF
+        except ImportError:
+            return ""
+    try:
+        text_parts = []
+        with fitz.open(file_path) as pdf:
+            for page in pdf:
+                text_parts.append(page.get_text())
+        return "\n".join(text_parts)
+    except Exception:
+        return ""
+
+
+def count_words_from_file(file_path: str) -> int:
+    """
+    统计文档字数（支持 .docx / .pdf）
+
+    :param file_path: 文件物理路径
+    :return: 字数（中文字符数 + 英文单词数），失败返回 0
+    """
+    if not file_path or not os.path.exists(file_path):
+        return 0
+
+    ext = os.path.splitext(file_path)[1].lower()
+    text = ""
+
+    if ext == ".docx":
+        doc = _safe_extract_docx(file_path)
+        if doc is not None:
+            text = _extract_all_text(doc)
+    elif ext == ".pdf":
+        text = _extract_pdf_text(file_path)
+    # .doc 格式暂不支持，返回 0
+
+    return _count_words(text)
+
+
 def _check_title_format(doc) -> Dict[str, Any]:
     """检测标题格式"""
     passed = True
@@ -158,20 +201,51 @@ def _check_chapter_structure(doc) -> Dict[str, Any]:
     return {"passed": passed, "message": message, "score": score, "max_score": 15}
 
 
+def _extract_reference_text(all_text: str) -> str:
+    """提取参考文献部分的文本（截截至致谢/附录/声明等后续章节）"""
+    # 参考文献标题必须独立成行（前面是换行/开头，后面是换行/冒号/句号/空白）
+    # 避免匹配到正文中"参考文献格式"等词语
+    ref_section = re.search(
+        r"(?:^|\n)\s*(?:[一二三四五六七八九十]+[、.．]\s*)?参\s*考\s*文\s*献\s*[:：.\n]*(.*)",
+        all_text, re.DOTALL
+    )
+    if not ref_section:
+        return ""
+    ref_text = ref_section.group(1)
+    # 截截至后续章节标题（致谢、附录、声明、攻读期间成果等）
+    cut_patterns = [
+        r"\n\s*致\s*谢\s*\n",
+        r"\n\s*附\s*录\s*\n",
+        r"\n\s*声\s*明\s*\n",
+        r"\n\s*攻读(?:学位|硕士|博士)期间(?:发表|取得|成果)",
+        r"\n\s*作者简介",
+    ]
+    cut_pos = len(ref_text)
+    for pat in cut_patterns:
+        m = re.search(pat, ref_text)
+        if m and m.start() < cut_pos:
+            cut_pos = m.start()
+    return ref_text[:cut_pos].strip()
+
+
 def _check_references(doc, all_text: str) -> Dict[str, Any]:
     """检测参考文献格式"""
     passed = True
     message = "参考文献格式正确"
     score = 15
 
-    ref_section = re.search(r"参\s*考\s*文\s*献[：:.\n]*(.*)", all_text, re.DOTALL)
-    if not ref_section:
+    ref_text = _extract_reference_text(all_text)
+    if not ref_text:
         passed = False
         message = "未检测到参考文献部分"
         score = 0
     else:
-        ref_text = ref_section.group(1).strip()
-        ref_lines = [l.strip() for l in ref_text.split("\n") if l.strip() and re.match(r"^\[?\d+\]?", l.strip())]
+        # 严格匹配参考文献条目：[1] xxx 或 1. xxx 或 [1]xxx 等
+        ref_line_pattern = re.compile(r"^\s*\[?\s*\d+\s*\]?[\.\s、]+")
+        ref_lines = [
+            l.strip() for l in ref_text.split("\n")
+            if l.strip() and ref_line_pattern.match(l.strip())
+        ]
         ref_count = len(ref_lines)
 
         if ref_count < 10:
@@ -377,7 +451,13 @@ def run_format_check(file_path: str) -> Dict[str, Any]:
     word_count = _count_words(all_text)
     page_count = max(1, word_count // 800)
     chapter_count = sum(1 for p in doc.paragraphs if p.style and "Heading" in (p.style.name or "") and p.text.strip())
-    ref_count = len(re.findall(r"\[\d+\]", all_text))
+    # 参考文献数量：仅统计参考文献部分的条目，而非全文引用
+    ref_text_for_stats = _extract_reference_text(all_text)
+    ref_line_pattern = re.compile(r"^\s*\[?\s*\d+\s*\]?[\.\s、]+")
+    ref_count = sum(
+        1 for l in ref_text_for_stats.split("\n")
+        if l.strip() and ref_line_pattern.match(l.strip())
+    )
 
     return {
         "check_items": check_items,

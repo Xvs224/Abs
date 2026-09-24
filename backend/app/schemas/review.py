@@ -28,6 +28,12 @@ class ReviewCreate(BaseModel):
     deadline: Optional[datetime] = None
 
 
+class ReviewApply(BaseModel):
+    """学生申请评阅请求（含首次申请和再次评阅）"""
+    version_id: int = Field(..., description="待评阅的论文版本ID")
+    review_type: Optional[str] = "normal"
+
+
 class ReviewSubmit(BaseModel):
     """提交评阅结果请求"""
     topic_score: float = Field(..., ge=0, le=100)
@@ -39,6 +45,9 @@ class ReviewSubmit(BaseModel):
     opinion: str = ""
     suggestions: str = ""
     result: str = Field(..., pattern="^(pass|revision|reject)$")
+    review_file_id: Optional[int] = None
+    review_file_path: Optional[str] = ""
+    review_file_name: Optional[str] = ""
 
 
 class ReviewResponse(ReviewBase):
@@ -59,6 +68,9 @@ class ReviewResponse(ReviewBase):
     topic_title: Optional[str] = ""
     student_name: Optional[str] = ""
     reviewer_name: Optional[str] = ""
+    review_file_id: Optional[int] = None
+    review_file_path: Optional[str] = ""
+    review_file_name: Optional[str] = ""
 
     class Config:
         from_attributes = True
@@ -79,6 +91,7 @@ class DefenseBase(BaseModel):
 class DefenseCreate(DefenseBase):
     """创建答辩安排请求"""
     topic_id: int
+    status: Optional[str] = Field(default=None, pattern="^(pending|scheduled|completed|in_progress)$")
 
 
 class DefenseScore(BaseModel):
@@ -91,6 +104,9 @@ class DefenseScore(BaseModel):
     opinion: str = ""
     suggestions: str = ""
     result: str = Field(..., pattern="^(pass|fail|reargue)$")
+    defense_file_id: Optional[int] = None
+    defense_file_path: Optional[str] = ""
+    defense_file_name: Optional[str] = ""
 
 
 class DefenseResponse(DefenseBase):
@@ -111,11 +127,19 @@ class DefenseResponse(DefenseBase):
     status: str
     create_time: Optional[datetime] = None
     update_time: Optional[datetime] = None
+    defense_file_id: Optional[int] = None
+    defense_file_path: Optional[str] = ""
+    defense_file_name: Optional[str] = ""
 
     # 关联信息
     topic_title: Optional[str] = ""
     student_name: Optional[str] = ""
     chair_name: Optional[str] = ""
+    secretary_name: Optional[str] = ""
+    committee_member_names: Optional[str] = ""
+    review_result: Optional[str] = ""
+    review_result_text: Optional[str] = "未评阅"
+    review_passed: Optional[bool] = False
 
     class Config:
         from_attributes = True

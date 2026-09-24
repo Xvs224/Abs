@@ -51,7 +51,6 @@
         <el-table-column prop="student_name" label="学生" width="100" />
         <el-table-column prop="teacher_name" label="指导教师" width="100" />
         <el-table-column prop="word_count" label="字数" width="80" align="center" />
-        <el-table-column prop="references_count" label="参考文献" width="90" align="center" />
         <el-table-column prop="status" label="状态" width="100" align="center">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)" size="small">
@@ -116,7 +115,6 @@
               </el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="字数">{{ currentDetail.word_count || 0 }}</el-descriptions-item>
-            <el-descriptions-item label="参考文献数">{{ currentDetail.references_count || 0 }}</el-descriptions-item>
             <el-descriptions-item label="提交时间">{{ formatTime(currentDetail.submit_time) }}</el-descriptions-item>
             <el-descriptions-item label="审核时间" v-if="currentDetail.review_time">{{ formatTime(currentDetail.review_time) }}</el-descriptions-item>
             <el-descriptions-item label="开题报告文档" :span="2">
@@ -153,11 +151,6 @@
           <div class="detail-section">
             <div class="section-title">进度安排</div>
             <div class="section-content">{{ currentDetail.schedule_plan || '-' }}</div>
-          </div>
-
-          <div class="detail-section">
-            <div class="section-title">参考文献列表</div>
-            <div class="section-content">{{ currentDetail.references_list || '-' }}</div>
           </div>
 
           <div class="detail-section" v-if="currentDetail.review_opinion">

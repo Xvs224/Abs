@@ -41,7 +41,6 @@ class FeatureExtractor:
             "review_score_deviation",
             "defense_score",
             "proposal_word_count",
-            "proposal_references_count",
         ]
 
     # ------------------------------------------------------------------
@@ -122,7 +121,6 @@ class FeatureExtractor:
         else:
             features.update({
                 "proposal_word_count": 0,
-                "proposal_references_count": 0,
                 "proposal_status": "none",
             })
 
@@ -181,7 +179,6 @@ class FeatureExtractor:
             "proposal_id": proposal_id,
             "proposal_exists": True,
             "proposal_word_count": proposal.word_count or 0,
-            "proposal_references_count": proposal.references_count or 0,
             "proposal_status": proposal.status,
             "topic_id": proposal.topic_id,
             "student_id": proposal.student_id,
@@ -455,7 +452,6 @@ class FeatureExtractor:
                 "review_score_deviation",
                 "defense_score",
                 "proposal_word_count",
-                "proposal_references_count",
             ]
 
         vector: List[float] = []

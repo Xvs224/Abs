@@ -134,14 +134,22 @@ def create_version(db: Session, data: ThesisVersionCreate, student_id: int) -> T
     # 确定版本号：传入则使用指定版本号（一稿=1, 二稿=2, 终稿=3），否则自动递增
     if data.version_num is not None:
         target_version_num = data.version_num
-        # 若该版本号已存在，先删除旧版本（替换）
+        # 若该版本号已存在，直接更新文件信息（不删除重建，避免被 reviews 等外键引用时触发 IntegrityError）
         existing = db.query(ThesisVersion).filter(
             ThesisVersion.topic_id == data.topic_id,
             ThesisVersion.version_num == target_version_num
         ).first()
         if existing:
-            db.delete(existing)
-            db.flush()
+            existing.file_path = data.file_path
+            existing.file_name = data.file_name
+            existing.file_size = data.file_size
+            existing.file_type = data.file_type
+            existing.change_log = data.change_log
+            existing.format_check_status = "pending"
+            existing.format_score = 0.0
+            db.commit()
+            db.refresh(existing)
+            return ThesisVersionResponse(**_enrich_version(existing))
     else:
         latest = get_latest_version(db, data.topic_id)
         target_version_num = latest.version_num + 1 if latest else 1
@@ -192,6 +200,12 @@ def delete_version(db: Session, version_id: int, current_user: User) -> None:
     # 权限校验
     if current_user.role == "student" and version.student_id != current_user.id:
         raise BusinessException(403, "无权删除他人的论文版本")
+
+    # 若该版本已被评阅引用，不允许删除（避免外键冲突）
+    from app.models.review import Review
+    referenced = db.query(Review).filter(Review.version_id == version_id).first()
+    if referenced:
+        raise BusinessException(400, "该论文版本已被评阅引用，无法删除")
 
     db.delete(version)
     db.commit()

@@ -75,6 +75,8 @@ class Rectification(Base):
     rectification_content = Column(Text, default="", comment="整改内容")
     rectification_file_path = Column(String(255), default="", comment="整改材料文件路径")
     rectification_file_name = Column(String(255), default="", comment="整改材料文件名")
+    rectification_ppt_path = Column(String(255), default="", comment="整改PPT文件路径")
+    rectification_ppt_name = Column(String(255), default="", comment="整改PPT文件名")
     submit_time = Column(DateTime, comment="整改提交时间")
 
     reviewer_id = Column(Integer, ForeignKey("users.id"), comment="复检人ID")

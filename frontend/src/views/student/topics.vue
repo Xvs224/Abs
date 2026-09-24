@@ -1,12 +1,13 @@
 <template>
   <div class="student-topics">
+    <StageBanner module-key="topic" />
     <el-card shadow="never">
       <template #header>
         <div class="page-header">
           <span>选题管理</span>
           <div v-if="!currentTopic" class="header-actions">
-            <el-button type="primary" :icon="Reading" @click="openSelectDialog">开始选题</el-button>
-            <el-button type="success" :icon="EditPen" @click="openSelfPropose">自拟选题</el-button>
+            <el-button type="primary" :icon="Reading" @click="openSelectDialog" :disabled="isLocked">开始选题</el-button>
+            <el-button type="success" :icon="EditPen" @click="openSelfPropose" :disabled="isLocked">自拟选题</el-button>
           </div>
         </div>
       </template>
@@ -42,12 +43,12 @@
 
         <div class="topic-actions">
           <template v-if="currentTopic.status === 'pending'">
-            <el-button type="danger" plain @click="handleCancel">取消选题</el-button>
+            <el-button type="danger" plain @click="handleCancel" :disabled="isLocked">取消选题</el-button>
           </template>
           <template v-if="currentTopic.status === 'rejected'">
-            <el-button type="primary" @click="openEdit">修改选题</el-button>
-            <el-button type="success" @click="handleResubmit">修改后重新提交</el-button>
-            <el-button type="danger" plain @click="handleDelete">删除选题</el-button>
+            <el-button type="primary" @click="openEdit" :disabled="isLocked">修改选题</el-button>
+            <el-button type="success" @click="handleResubmit" :disabled="isLocked">修改后重新提交</el-button>
+            <el-button type="danger" plain @click="handleDelete" :disabled="isLocked">删除选题</el-button>
           </template>
         </div>
       </div>
@@ -55,8 +56,8 @@
       <!-- 无选题 -->
       <el-empty v-else description="您还未选择选题，请从下方选择方式开始">
         <div class="empty-actions">
-          <el-button type="primary" :icon="Reading" @click="openSelectDialog" size="large">开始选题</el-button>
-          <el-button type="success" :icon="EditPen" @click="openSelfPropose" size="large">自拟选题</el-button>
+          <el-button type="primary" :icon="Reading" @click="openSelectDialog" :disabled="isLocked" size="large">开始选题</el-button>
+          <el-button type="success" :icon="EditPen" @click="openSelfPropose" :disabled="isLocked" size="large">自拟选题</el-button>
         </div>
       </el-empty>
     </el-card>
@@ -107,7 +108,7 @@
         </el-table-column>
         <el-table-column label="操作" width="100" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link size="small" @click="handleSelect(row)">选择</el-button>
+            <el-button type="primary" link size="small" @click="handleSelect(row)" :disabled="isLocked">选择</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -171,17 +172,21 @@
       </el-form>
       <template #footer>
         <el-button @click="selfProposeDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="selfLoading" @click="handleSelfProposeSubmit">提交</el-button>
+        <el-button type="primary" :loading="selfLoading" @click="handleSelfProposeSubmit" :disabled="isLocked">提交</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
+import StageBanner from '@/views/common/StageBanner.vue'
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Reading, EditPen, Search } from '@element-plus/icons-vue'
 import studentApi from '@/api/student'
+import { useStageLock } from '@/composables/useStageLock'
+
+const { isLocked } = useStageLock('topic')
 
 const currentTopic = ref(null)
 const selectDialogVisible = ref(false)

@@ -30,6 +30,12 @@ export default [
         meta: { title: '中期检查' }
       },
       {
+        path: 'guidance',
+        name: 'StudentGuidance',
+        component: () => import('@/views/student/guidance.vue'),
+        meta: { title: '过程指导' }
+      },
+      {
         path: 'thesis',
         name: 'StudentThesis',
         redirect: '/student/thesis/draft1',

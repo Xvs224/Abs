@@ -136,7 +136,6 @@
                 {{ statusLabel(currentDetail.status) }}
               </el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="归档地点">{{ currentDetail.archive_location || '-' }}</el-descriptions-item>
             <el-descriptions-item label="归档时间" :span="2">{{ formatTime(currentDetail.archive_time) }}</el-descriptions-item>
           </el-descriptions>
 

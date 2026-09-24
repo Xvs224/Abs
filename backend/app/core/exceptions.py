@@ -83,11 +83,18 @@ def register_exception_handlers(app):
 
     @app.exception_handler(IntegrityError)
     async def integrity_exception_handler(request: Request, exc: IntegrityError):
-        """数据库完整性异常（如唯一约束冲突）— HTTP 409"""
+        """数据库完整性异常 — HTTP 409"""
         logger.warning(f"数据库完整性异常: {str(exc)}")
+        err_msg = str(exc).lower()
+        if "foreign key" in err_msg or "cannot delete or update a parent row" in err_msg:
+            message = "存在关联数据，无法删除，请先删除关联记录"
+        elif "duplicate" in err_msg or "unique" in err_msg:
+            message = "数据冲突，可能存在重复记录"
+        else:
+            message = "数据完整性约束冲突"
         return JSONResponse(
             status_code=409,
-            content={"code": 409, "message": "数据冲突，可能存在重复记录", "data": None}
+            content={"code": 409, "message": message, "data": None}
         )
 
     @app.exception_handler(SQLAlchemyError)

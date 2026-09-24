@@ -119,12 +119,16 @@ def download_file(
 
 @router.get("/download", summary="按路径下载文件")
 def download_by_path(
-    path: str = Query(..., description="文件存储路径"),
+    path: str = Query(..., description="文件存储路径或文件名"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """根据文件存储路径下载文件（归档材料等按路径存储的场景）"""
+    # 优先按存储路径查找
     file_record = db.query(UploadedFile).filter(UploadedFile.file_path == path).first()
+    if not file_record:
+        # 兼容归档中存储的文件名，按原始文件名查找
+        file_record = db.query(UploadedFile).filter(UploadedFile.original_name == path).first()
     if not file_record:
         # 元数据不存在但物理文件可能存在，直接尝试返回
         if os.path.exists(path):

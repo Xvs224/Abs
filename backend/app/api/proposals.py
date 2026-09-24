@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.core.response import success_response, page_response
 from app.core.security import get_current_user, require_admin_or_teacher, require_teacher_only, require_student, require_student_or_teacher, require_any_authenticated
+from app.core.stage_gate import raise_if_locked
+from app.core.anomaly_hook import trigger_after_submit
 from app.schemas.proposal import ProposalCreate, ProposalUpdate, ProposalReview, ProposalSubmit, ProposalResponse
 from app.schemas.common import PaginationParams
 from app.models.user import User
@@ -42,6 +44,7 @@ def create_or_update_proposal(
     current_user: User = Depends(require_student),
 ):
     """学生创建或更新开题报告（草稿）"""
+    raise_if_locked(db, "proposal", current_user.role)
     result = proposal_service.create_or_update_proposal(db, data, current_user.id)
     return success_response(data=result, message="开题报告保存成功")
 
@@ -65,6 +68,8 @@ def update_proposal(
     current_user: User = Depends(require_student_or_teacher),
 ):
     """更新开题报告信息"""
+    if current_user.role == "student":
+        raise_if_locked(db, "proposal", current_user.role)
     result = proposal_service.update_proposal(db, proposal_id, data, current_user)
     return success_response(data=result, message="开题报告更新成功")
 
@@ -77,7 +82,9 @@ def submit_proposal(
     current_user: User = Depends(require_student),
 ):
     """学生提交开题报告待审核"""
+    raise_if_locked(db, "proposal", current_user.role)
     result = proposal_service.submit_proposal(db, proposal_id, current_user.id)
+    trigger_after_submit(db, current_user.id)
     return success_response(data=result, message="开题报告提交成功")
 
 

@@ -96,8 +96,9 @@ def detect_batch(
 
 @router.post("/detect/full", summary="全量异常检测")
 def detect_full(
+    request: DetectionRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_teacher_or_admin),
 ):
     """
     运行全量异常检测，检测所有目标类型的所有数据
@@ -105,6 +106,36 @@ def detect_full(
     service = AnomalyService(db)
     result = service.run_full_detection()
     return success_response(data=result, message="全量检测完成")
+
+
+@router.post("/detect/rules", summary="全量规则类检测")
+def detect_rules(
+    request: DetectionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_teacher_or_admin),
+):
+    service = AnomalyService(db)
+    result = service.run_rule_detection()
+    return success_response(data=result, message="规则检测完成")
+
+
+@router.post("/detect/student/{student_id}", summary="触发单个学生检测（可业务提交后调用）")
+def detect_for_student(
+    student_id: int,
+    clear_old: bool = Query(False, description="是否清空旧待复核记录"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # 权限：本人 / 管理员 / 该学生指导教师
+    if current_user.role not in ("admin",):
+        from app.models.topic import Topic
+        topic = db.query(Topic).filter(Topic.student_id == student_id).first()
+        if current_user.id != student_id and (not topic or topic.teacher_id != current_user.id):
+            from fastapi import HTTPException
+            raise HTTPException(403, "无权为该学生触发检测")
+    service = AnomalyService(db)
+    result = service.trigger_for_student(student_id, clear_old=clear_old)
+    return success_response(data=result, message="检测完成")
 
 
 # ==================================================================
@@ -231,6 +262,36 @@ def get_review_history(
     return success_response(data=result)
 
 
+@router.delete("/records/{record_id}", summary="删除异常记录")
+def delete_record(
+    record_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_teacher_or_admin),
+):
+    """
+    删除异常记录（教师、管理员可操作）。
+    教师只能删除自己负责学生的异常记录。
+    """
+    from app.models.anomaly import AnomalyRecord, AnomalyReview
+
+    record = db.query(AnomalyRecord).filter(AnomalyRecord.id == record_id).first()
+    if not record:
+        return success_response(message="记录不存在或已删除")
+
+    # 教师数据隔离
+    if current_user.role == "teacher":
+        student_ids = _get_teacher_student_ids(db, current_user.id)
+        if record.student_id not in student_ids:
+            from app.core.exceptions import BusinessException
+            raise BusinessException(403, "无权删除非本人负责学生的异常记录")
+
+    # 级联删除复核记录
+    db.query(AnomalyReview).filter(AnomalyReview.anomaly_id == record_id).delete(synchronize_session=False)
+    db.delete(record)
+    db.commit()
+    return success_response(message="删除成功")
+
+
 # ==================================================================
 # 统计接口
 # ==================================================================
@@ -261,25 +322,18 @@ def get_stats(
 # 评估接口
 # ==================================================================
 
-@router.post("/evaluate", summary="检测准确性评估")
+@router.post("/evaluate", summary="检测准确性评估（基于真实已复核数据）")
 def evaluate_detection(
-    request: AnomalyEvaluationRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_teacher_or_admin),
 ):
     """
-    评估异常检测方法的准确性
+    评估异常检测方法的准确性。
 
-    - **dataset_type**: 数据集类型 (normal/critical/abnormal/all)
-    - **detection_method**: 检测方法 (iqr/isolation_forest/combined)
-
-    返回准确率、精确率、召回率、F1分数、误报率等指标。
+    仅基于已人工复核的真实业务数据计算精确率、召回率等指标，不使用模拟数据。
     """
     service = AnomalyService(db)
-    result = service.evaluate_detection(
-        dataset_type=request.dataset_type,
-        method=request.detection_method,
-    )
+    result = service.evaluate_detection(dataset_type="real", method="combined")
     return success_response(data=result, message="评估完成")
 
 

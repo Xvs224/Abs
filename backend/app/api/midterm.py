@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.core.response import success_response, page_response
 from app.core.security import get_current_user, require_admin_or_teacher, require_teacher_only, require_student, require_student_or_teacher, require_any_authenticated
+from app.core.stage_gate import raise_if_locked
+from app.core.anomaly_hook import trigger_after_submit
 from app.schemas.midterm import (
     MidtermCheckCreate, MidtermCheckUpdate, MidtermReview, MidtermSubmit, MidtermCheckResponse,
     MidtermGuidance, MidtermPPTSubmit,
@@ -48,79 +50,9 @@ def create_or_update_midterm(
     current_user: User = Depends(require_student),
 ):
     """学生创建或更新中期检查（草稿）"""
+    raise_if_locked(db, "midterm", current_user.role)
     result = midterm_service.create_or_update_midterm(db, data, current_user.id)
     return success_response(data=result, message="中期检查保存成功")
-
-
-@router.get("/{midterm_id}", summary="中期检查详情")
-def get_midterm(
-    midterm_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_student_or_teacher),
-):
-    """获取中期检查详情"""
-    result = midterm_service.get_midterm_detail(db, midterm_id)
-    return success_response(data=result)
-
-
-@router.put("/{midterm_id}", summary="更新中期检查")
-def update_midterm(
-    midterm_id: int,
-    data: MidtermCheckUpdate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_student_or_teacher),
-):
-    """更新中期检查信息"""
-    result = midterm_service.update_midterm(db, midterm_id, data, current_user)
-    return success_response(data=result, message="中期检查更新成功")
-
-
-@router.post("/{midterm_id}/submit", summary="提交中期检查表")
-def submit_midterm(
-    midterm_id: int,
-    data: MidtermSubmit = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_student),
-):
-    """学生提交中期检查表（阶段1），等待教师指导"""
-    result = midterm_service.submit_midterm(db, midterm_id, current_user.id)
-    return success_response(data=result, message="中期检查表提交成功")
-
-
-@router.post("/{midterm_id}/guidance", summary="教师指导")
-def teacher_guidance(
-    midterm_id: int,
-    data: MidtermGuidance,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_teacher_only),
-):
-    """教师对中期检查表给出指导意见（阶段1）"""
-    result = midterm_service.teacher_guidance(db, midterm_id, data, current_user)
-    return success_response(data=result, message="指导意见已提交")
-
-
-@router.post("/{midterm_id}/submit-ppt", summary="提交中期检查PPT")
-def submit_ppt(
-    midterm_id: int,
-    data: MidtermPPTSubmit,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_student),
-):
-    """学生提交中期检查演示文稿PPT（阶段2）"""
-    result = midterm_service.submit_ppt(db, midterm_id, data, current_user.id)
-    return success_response(data=result, message="PPT提交成功")
-
-
-@router.post("/{midterm_id}/review", summary="评审中期检查")
-def review_midterm(
-    midterm_id: int,
-    data: MidtermReview,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_teacher_only),
-):
-    """教师评审中期检查（阶段2，PPT提交后最终评审）"""
-    result = midterm_service.review_midterm(db, midterm_id, data, current_user)
-    return success_response(data=result, message="评审完成")
 
 
 # ==================== 整改管理 ====================
@@ -193,7 +125,9 @@ def submit_rectification(
     current_user: User = Depends(require_student),
 ):
     """学生提交整改材料待复检"""
+    raise_if_locked(db, "midterm", current_user.role)
     result = midterm_service.submit_rectification(db, rect_id, data, current_user.id)
+    trigger_after_submit(db, current_user.id)
     return success_response(data=result, message="整改提交成功")
 
 
@@ -207,6 +141,85 @@ def review_rectification(
     """教师复检整改结果"""
     result = midterm_service.review_rectification(db, rect_id, data, current_user)
     return success_response(data=result, message="复检完成")
+
+
+# ==================== 中期检查详情/操作 ====================
+
+@router.get("/{midterm_id}", summary="中期检查详情")
+def get_midterm(
+    midterm_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_student_or_teacher),
+):
+    """获取中期检查详情"""
+    result = midterm_service.get_midterm_detail(db, midterm_id)
+    return success_response(data=result)
+
+
+@router.put("/{midterm_id}", summary="更新中期检查")
+def update_midterm(
+    midterm_id: int,
+    data: MidtermCheckUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_student_or_teacher),
+):
+    """更新中期检查信息"""
+    if current_user.role == "student":
+        raise_if_locked(db, "midterm", current_user.role)
+    result = midterm_service.update_midterm(db, midterm_id, data, current_user)
+    return success_response(data=result, message="中期检查更新成功")
+
+
+@router.post("/{midterm_id}/submit", summary="提交中期检查表")
+def submit_midterm(
+    midterm_id: int,
+    data: MidtermSubmit = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_student),
+):
+    """学生提交中期检查表（阶段1），等待教师指导"""
+    raise_if_locked(db, "midterm", current_user.role)
+    result = midterm_service.submit_midterm(db, midterm_id, current_user.id)
+    trigger_after_submit(db, current_user.id)
+    return success_response(data=result, message="中期检查表提交成功")
+
+
+@router.post("/{midterm_id}/guidance", summary="教师指导")
+def teacher_guidance(
+    midterm_id: int,
+    data: MidtermGuidance,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_teacher_only),
+):
+    """教师对中期检查表给出指导意见（阶段1）"""
+    result = midterm_service.teacher_guidance(db, midterm_id, data, current_user)
+    return success_response(data=result, message="指导意见已提交")
+
+
+@router.post("/{midterm_id}/submit-ppt", summary="提交中期检查PPT")
+def submit_ppt(
+    midterm_id: int,
+    data: MidtermPPTSubmit,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_student),
+):
+    """学生提交中期检查演示文稿PPT（阶段2）"""
+    raise_if_locked(db, "midterm", current_user.role)
+    result = midterm_service.submit_ppt(db, midterm_id, data, current_user.id)
+    trigger_after_submit(db, current_user.id)
+    return success_response(data=result, message="PPT提交成功")
+
+
+@router.post("/{midterm_id}/review", summary="评审中期检查")
+def review_midterm(
+    midterm_id: int,
+    data: MidtermReview,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_teacher_only),
+):
+    """教师评审中期检查（阶段2，PPT提交后最终评审）"""
+    result = midterm_service.review_midterm(db, midterm_id, data, current_user)
+    return success_response(data=result, message="评审完成")
 
 
 @router.delete("/{midterm_id}", summary="删除中期检查")

@@ -13,8 +13,6 @@ class ProposalBase(BaseModel):
     technical_route: Optional[str] = Field(default="", description="技术路线")
     expected_results: Optional[str] = Field(default="", description="预期成果")
     schedule_plan: Optional[str] = Field(default="", description="进度安排")
-    references_count: Optional[int] = Field(default=0, description="参考文献数量")
-    references_list: Optional[str] = Field(default="", description="参考文献列表")
     word_count: Optional[int] = Field(default=0, description="字数")
 
 
@@ -33,8 +31,6 @@ class ProposalUpdate(BaseModel):
     technical_route: Optional[str] = None
     expected_results: Optional[str] = None
     schedule_plan: Optional[str] = None
-    references_count: Optional[int] = None
-    references_list: Optional[str] = None
     word_count: Optional[int] = None
     file_id: Optional[int] = None
     file_path: Optional[str] = None

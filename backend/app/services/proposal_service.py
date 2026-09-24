@@ -14,6 +14,17 @@ from app.core.exceptions import NotFoundException, BusinessException, ConflictEx
 from app.schemas.common import PaginationParams
 
 
+def _compute_word_count(file_path: Optional[str]) -> int:
+    """从上传文档中统计字数，失败返回 0"""
+    if not file_path:
+        return 0
+    try:
+        from app.services.format_checker import count_words_from_file
+        return count_words_from_file(file_path)
+    except Exception:
+        return 0
+
+
 def _enrich_proposal(proposal: Proposal) -> dict:
     """补充开题报告关联信息"""
     data = {c.name: getattr(proposal, c.name) for c in proposal.__table__.columns}
@@ -113,6 +124,9 @@ def create_or_update_proposal(db: Session, data: ProposalCreate, student_id: int
 
         update_data = data.model_dump(exclude_unset=True)
         update_data.pop("topic_id", None)
+        # 若上传了文件，自动统计字数
+        if update_data.get("file_path"):
+            update_data["word_count"] = _compute_word_count(update_data["file_path"])
         for key, value in update_data.items():
             setattr(existing, key, value)
 
@@ -130,9 +144,7 @@ def create_or_update_proposal(db: Session, data: ProposalCreate, student_id: int
         technical_route=data.technical_route,
         expected_results=data.expected_results,
         schedule_plan=data.schedule_plan,
-        references_count=data.references_count,
-        references_list=data.references_list,
-        word_count=data.word_count,
+        word_count=_compute_word_count(data.file_path),
         file_id=data.file_id,
         file_path=data.file_path,
         file_name=data.file_name,
@@ -158,6 +170,9 @@ def update_proposal(db: Session, proposal_id: int, data: ProposalUpdate, current
             raise BusinessException(400, "当前状态不允许修改开题报告")
 
     update_data = data.model_dump(exclude_unset=True)
+    # 若上传了文件，自动统计字数
+    if update_data.get("file_path"):
+        update_data["word_count"] = _compute_word_count(update_data["file_path"])
     for key, value in update_data.items():
         setattr(proposal, key, value)
 

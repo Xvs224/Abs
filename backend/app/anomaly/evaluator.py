@@ -39,7 +39,6 @@ class AnomalyEvaluator:
         "review_score_deviation",
         "defense_score",
         "proposal_word_count",
-        "proposal_references_count",
     ]
 
     # 各特征的正常范围（用于生成测试数据）
@@ -56,7 +55,6 @@ class AnomalyEvaluator:
         "review_score_deviation": (5.0, 3.0, "high"),
         "defense_score": (78.0, 10.0, "low"),
         "proposal_word_count": (3000.0, 800.0, "both"),
-        "proposal_references_count": (15.0, 5.0, "low"),
     }
 
     def __init__(self, db: Session) -> None:

@@ -35,7 +35,6 @@ TARGET_FEATURE_MAP: Dict[str, List[Dict[str, str]]] = {
     ],
     "proposal": [
         {"name": "proposal_word_count", "label": "开题报告字数", "direction": "both"},
-        {"name": "proposal_references_count", "label": "参考文献数量", "direction": "both"},
     ],
     "midterm": [
         {"name": "progress_percentage", "label": "进度百分比", "direction": "low"},

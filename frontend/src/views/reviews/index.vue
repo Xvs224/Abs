@@ -66,11 +66,11 @@
                 {{ formatTime(row.create_time) }}
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="220" fixed="right" align="center">
+            <el-table-column label="操作" width="280" fixed="right" align="center">
               <template #default="{ row }">
                 <el-button type="primary" link size="small" @click="handleViewReview(row)">查看</el-button>
                 <el-button
-                  v-if="row.status === 'pending'"
+                  v-if="row.status === 'pending' && canManage"
                   type="success"
                   link
                   size="small"
@@ -79,13 +79,31 @@
                   分配
                 </el-button>
                 <el-button
-                  v-if="row.status === 'reviewing'"
+                  v-if="row.status === 'reviewing' && isTeacher"
                   type="warning"
                   link
                   size="small"
                   @click="handleSubmitReview(row)"
                 >
                   提交评阅
+                </el-button>
+                <el-button
+                  v-if="canManage && (isAdmin || row.status === 'completed')"
+                  type="warning"
+                  link
+                  size="small"
+                  @click="handleEditReview(row)"
+                >
+                  修改
+                </el-button>
+                <el-button
+                  v-if="canManage && (isAdmin || row.status !== 'completed')"
+                  type="danger"
+                  link
+                  size="small"
+                  @click="handleDeleteReview(row)"
+                >
+                  删除
                 </el-button>
               </template>
             </el-table-column>
@@ -147,9 +165,9 @@
             <el-table-column type="index" label="序号" width="60" align="center" />
             <el-table-column prop="topic_title" label="论文题目" min-width="180" show-overflow-tooltip />
             <el-table-column prop="student_name" label="学生" width="100" />
-            <el-table-column prop="committee_members" label="答辩委员会" width="150" show-overflow-tooltip>
+            <el-table-column prop="committee_member_names" label="答辩委员会" width="150" show-overflow-tooltip>
               <template #default="{ row }">
-                {{ row.committee_members || '未安排' }}
+                {{ row.committee_member_names || '未安排' }}
               </template>
             </el-table-column>
             <el-table-column label="答辩时间" width="160">
@@ -160,6 +178,14 @@
             <el-table-column prop="location" label="答辩地点" width="120" show-overflow-tooltip>
               <template #default="{ row }">
                 {{ row.location || '-' }}
+              </template>
+            </el-table-column>
+            <el-table-column label="评阅结果" width="110" align="center">
+              <template #default="{ row }">
+                <el-tag v-if="row.review_result" :type="row.review_passed ? 'success' : 'danger'" size="small">
+                  {{ row.review_result_text }}
+                </el-tag>
+                <span v-else class="text-muted">未评阅</span>
               </template>
             </el-table-column>
             <el-table-column prop="status" label="状态" width="100" align="center">
@@ -177,26 +203,51 @@
                 <span v-else class="text-muted">-</span>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="220" fixed="right" align="center">
+            <el-table-column label="操作" width="280" fixed="right" align="center">
               <template #default="{ row }">
                 <el-button type="primary" link size="small" @click="handleViewDefense(row)">查看</el-button>
-                <el-button
-                  v-if="row.status === 'pending'"
-                  type="success"
-                  link
-                  size="small"
-                  @click="handleScheduleDefense(row)"
+                <el-tooltip
+                  v-if="row.status === 'pending' && canManage"
+                  :content="row.review_passed ? '' : (row.review_result ? `评阅结果为「${row.review_result_text}」，需评阅通过后才可安排答辩` : '该选题尚未完成论文评阅，无法安排答辩')"
+                  placement="top"
+                  :disabled="row.review_passed"
                 >
-                  安排
-                </el-button>
+                  <el-button
+                    type="success"
+                    link
+                    size="small"
+                    :disabled="!row.review_passed"
+                    @click="handleScheduleDefense(row)"
+                  >
+                    安排
+                  </el-button>
+                </el-tooltip>
                 <el-button
-                  v-if="row.status === 'scheduled'"
+                  v-if="row.status === 'scheduled' && isTeacher"
                   type="warning"
                   link
                   size="small"
                   @click="handleScoreDefense(row)"
                 >
                   评分
+                </el-button>
+                <el-button
+                  v-if="canManage && (isAdmin || row.status === 'completed')"
+                  type="warning"
+                  link
+                  size="small"
+                  @click="handleEditDefense(row)"
+                >
+                  修改
+                </el-button>
+                <el-button
+                  v-if="canManage && (isAdmin || row.status !== 'completed')"
+                  type="danger"
+                  link
+                  size="small"
+                  @click="handleDeleteDefense(row)"
+                >
+                  删除
                 </el-button>
               </template>
             </el-table-column>
@@ -237,7 +288,15 @@
           </el-select>
         </el-form-item>
         <el-form-item label="评阅教师" prop="reviewer_id">
-          <el-input v-model="assignForm.reviewer_id" placeholder="请输入评阅教师工号" />
+          <el-select
+            v-model="assignForm.reviewer_id"
+            v-loading="teacherLoading"
+            placeholder="请选择评阅教师"
+            filterable
+            style="width: 100%"
+          >
+            <el-option v-for="t in teacherOptions" :key="t.value" :label="t.label" :value="t.value" />
+          </el-select>
         </el-form-item>
         <el-form-item label="截止日期" prop="deadline">
           <el-date-picker
@@ -256,7 +315,7 @@
     </el-dialog>
 
     <!-- 提交评阅对话框 -->
-    <el-dialog v-model="reviewSubmitDialogVisible" title="提交评阅意见" width="600px" :close-on-click-modal="false">
+    <el-dialog v-model="reviewSubmitDialogVisible" :title="editingReviewId ? '修改评阅意见' : '提交评阅意见'" width="600px" :close-on-click-modal="false">
       <el-form ref="reviewSubmitFormRef" :model="reviewSubmitForm" :rules="reviewSubmitRules" label-width="100px">
         <el-form-item label="评阅成绩" prop="total_score">
           <el-input-number v-model="reviewSubmitForm.total_score" :min="0" :max="100" :precision="1" />
@@ -300,11 +359,28 @@
             <el-radio value="reject">不同意答辩</el-radio>
           </el-radio-group>
         </el-form-item>
+        <el-form-item label="评阅意见书">
+          <el-upload
+            :auto-upload="false"
+            :limit="1"
+            :on-change="handleReviewFileChange"
+            :on-remove="handleReviewFileRemove"
+            :file-list="reviewFileList"
+            accept=".doc,.docx,.pdf"
+            drag
+          >
+            <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+            <div class="el-upload__text">将评阅意见书拖到此处，或<em>点击上传</em></div>
+            <template #tip>
+              <div class="el-upload__tip">支持 doc、docx、pdf 格式，提交后自动归入归档材料</div>
+            </template>
+          </el-upload>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="reviewSubmitDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="reviewSubmitLoading" v-if='isTeacher' @click="submitReviewForm">
-          提交评阅
+        <el-button type="primary" :loading="reviewSubmitLoading" v-if="canReview" @click="submitReviewForm">
+          {{ editingReviewId ? '保存修改' : '提交评阅' }}
         </el-button>
       </template>
     </el-dialog>
@@ -344,6 +420,7 @@
             format="HH:mm"
             value-format="HH:mm"
             style="width: 100%"
+            @change="validateDefenseTime"
           />
         </el-form-item>
         <el-form-item label="结束时间" prop="defense_time_end">
@@ -356,13 +433,43 @@
           />
         </el-form-item>
         <el-form-item label="答辩地点" prop="location">
-          <el-input v-model="scheduleForm.location" placeholder="请输入答辩地点" />
+          <el-select
+            v-model="scheduleForm.location"
+            v-loading="teacherLoading"
+            placeholder="请选择或输入答辩地点"
+            filterable
+            allow-create
+            default-first-option
+            style="width: 100%"
+          >
+            <el-option v-for="loc in locationOptions" :key="loc" :label="loc" :value="loc" />
+          </el-select>
         </el-form-item>
         <el-form-item label="答辩委员会" prop="committee_members">
-          <el-input v-model="scheduleForm.committee_members" placeholder="请输入答辩委员会成员" />
+          <el-select
+            v-model="scheduleForm.committee_members"
+            v-loading="teacherLoading"
+            placeholder="请选择答辩委员会成员"
+            multiple
+            collapse-tags
+            collapse-tags-tooltip
+            filterable
+            style="width: 100%"
+          >
+            <el-option v-for="t in teacherOptions" :key="t.value" :label="t.label" :value="t.value" />
+          </el-select>
         </el-form-item>
         <el-form-item label="答辩秘书" prop="secretary_id">
-          <el-input v-model="scheduleForm.secretary_id" placeholder="请输入答辩秘书工号" />
+          <el-select
+            v-model="scheduleForm.secretary_id"
+            v-loading="teacherLoading"
+            placeholder="请选择答辩秘书"
+            filterable
+            clearable
+            style="width: 100%"
+          >
+            <el-option v-for="t in teacherOptions" :key="t.value" :label="t.label" :value="t.value" />
+          </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -372,7 +479,7 @@
     </el-dialog>
 
     <!-- 答辩评分对话框 -->
-    <el-dialog v-model="scoreDialogVisible" title="答辩评分" width="600px" :close-on-click-modal="false">
+    <el-dialog v-model="scoreDialogVisible" :title="editingDefenseId ? '修改答辩评分' : '答辩评分'" width="600px" :close-on-click-modal="false">
       <el-form ref="scoreFormRef" :model="scoreForm" :rules="scoreRules" label-width="100px">
         <el-form-item label="报告内容" prop="presentation_score">
           <el-rate v-model="scoreForm.presentation_score" :max="10" show-score />
@@ -402,10 +509,29 @@
             <el-radio value="reargue">二次答辩</el-radio>
           </el-radio-group>
         </el-form-item>
+        <el-form-item label="答辩记录">
+          <el-upload
+            :auto-upload="false"
+            :limit="1"
+            :on-change="handleDefenseFileChange"
+            :on-remove="handleDefenseFileRemove"
+            :file-list="defenseFileList"
+            accept=".doc,.docx,.pdf"
+            drag
+          >
+            <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+            <div class="el-upload__text">将答辩记录拖到此处，或<em>点击上传</em></div>
+            <template #tip>
+              <div class="el-upload__tip">支持 doc、docx、pdf 格式，提交后自动归入归档材料</div>
+            </template>
+          </el-upload>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="scoreDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="scoreLoading" v-if='isTeacher' @click="submitScore">提交评分</el-button>
+        <el-button type="primary" :loading="scoreLoading" v-if="canManage" @click="submitScore">
+          {{ editingDefenseId ? '保存修改' : '提交评分' }}
+        </el-button>
       </template>
     </el-dialog>
 
@@ -437,7 +563,8 @@
       <el-descriptions :column="2" border v-if="currentDefenseDetail">
         <el-descriptions-item label="论文题目" :span="2">{{ currentDefenseDetail.topic_title }}</el-descriptions-item>
         <el-descriptions-item label="学生">{{ currentDefenseDetail.student_name }}</el-descriptions-item>
-        <el-descriptions-item label="答辩委员会">{{ currentDefenseDetail.committee_members || '未安排' }}</el-descriptions-item>
+        <el-descriptions-item label="答辩委员会">{{ currentDefenseDetail.committee_member_names || '未安排' }}</el-descriptions-item>
+        <el-descriptions-item label="答辩秘书">{{ currentDefenseDetail.secretary_name || '未安排' }}</el-descriptions-item>
         <el-descriptions-item label="答辩时间">{{ formatDefenseTime(currentDefenseDetail) }}</el-descriptions-item>
         <el-descriptions-item label="答辩地点">{{ currentDefenseDetail.location || '-' }}</el-descriptions-item>
         <el-descriptions-item label="状态">
@@ -463,15 +590,28 @@
 import { useUserStore } from '@/store/user' 
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { Search, Refresh, Plus, RefreshRight } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Search, Refresh, Plus, RefreshRight, UploadFilled } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import dayjs from 'dayjs'
 import { getTopicList } from '@/api/topic'
+import { getUserList } from '@/api/user'
+import {
+  getReviewList, submitReview, updateReview, deleteReview,
+  getDefenseList, updateDefense, scoreDefense, deleteDefense
+} from '@/api/review'
 
 
 const userStore = useUserStore()
 const isTeacher = computed(() => userStore.userInfo?.role === 'teacher')
+const isAdmin = computed(() => userStore.userInfo?.role === 'admin')
+const canManage = computed(() => isTeacher.value || isAdmin.value)
+// 当前用户是否可提交/修改评阅：管理员或该评阅的指定评阅教师
+const canReview = computed(() => {
+  if (isAdmin.value) return true
+  if (!currentRow) return isTeacher.value
+  return currentRow.reviewer_id === userStore.userInfo?.id
+})
 
 const route = useRoute()
 // 根据路由路径决定显示评阅还是答辩模块
@@ -490,11 +630,12 @@ const reviewSubmitLoading = ref(false)
 const reviewSubmitFormRef = ref(null)
 const reviewDetailVisible = ref(false)
 const currentReviewDetail = ref(null)
+const editingReviewId = ref(null)
 
-const assignForm = reactive({ topic_id: null, reviewer_id: '', deadline: '' })
+const assignForm = reactive({ topic_id: null, reviewer_id: null, deadline: '' })
 const assignRules = {
   topic_id: [{ required: true, message: '请选择论文题目', trigger: 'change' }],
-  reviewer_id: [{ required: true, message: '请输入评阅教师工号', trigger: 'blur' }]
+  reviewer_id: [{ required: true, message: '请选择评阅教师', trigger: 'change' }]
 }
 
 const reviewSubmitForm = reactive({
@@ -521,11 +662,18 @@ const defenseSearchForm = reactive({ status: '', keyword: '' })
 const scheduleDialogVisible = ref(false)
 const scheduleLoading = ref(false)
 const scheduleFormRef = ref(null)
+// 开始时间变化时重新校验结束时间
+const validateDefenseTime = () => {
+  if (scheduleFormRef.value && scheduleForm.defense_time_end) {
+    scheduleFormRef.value.validateField('defense_time_end')
+  }
+}
 const scoreDialogVisible = ref(false)
 const scoreLoading = ref(false)
 const scoreFormRef = ref(null)
 const defenseDetailVisible = ref(false)
 const currentDefenseDetail = ref(null)
+const editingDefenseId = ref(null)
 
 const scheduleForm = reactive({
   topic_id: null,
@@ -533,19 +681,59 @@ const scheduleForm = reactive({
   defense_time_start: '',
   defense_time_end: '',
   location: '',
-  committee_members: '',
-  secretary_id: ''
+  committee_members: [],
+  secretary_id: null
 })
 const scheduleRules = {
   topic_id: [{ required: true, message: '请选择论文题目', trigger: 'change' }],
   defense_date: [{ required: true, message: '请选择答辩日期', trigger: 'change' }],
   defense_time_start: [{ required: true, message: '请选择开始时间', trigger: 'change' }],
-  defense_time_end: [{ required: true, message: '请选择结束时间', trigger: 'change' }],
+  defense_time_end: [
+    { required: true, message: '请选择结束时间', trigger: 'change' },
+    {
+      validator: (rule, value, callback) => {
+        if (value && scheduleForm.defense_time_start && value <= scheduleForm.defense_time_start) {
+          callback(new Error('结束时间必须晚于开始时间'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'change'
+    }
+  ],
   location: [{ required: true, message: '请输入答辩地点', trigger: 'blur' }]
 }
 
 const topicOptions = ref([])
 const topicLoading = ref(false)
+
+// 教师列表（答辩委员会、秘书下拉）
+const teacherOptions = ref([])
+const teacherLoading = ref(false)
+// 常见答辩地点
+const locationOptions = ref([
+  '教学楼A101', '教学楼A102', '教学楼A201', '教学楼A202',
+  '教学楼B101', '教学楼B102', '教学楼B201', '教学楼B202',
+  '行政楼会议室', '学术报告厅', '线上(腾讯会议)', '线上(钉钉)'
+])
+
+const loadTeachers = async () => {
+  if (teacherOptions.value.length > 0) return
+  teacherLoading.value = true
+  try {
+    const res = await getUserList({ role: 'teacher', page: 1, page_size: 100 })
+    // 响应拦截器已返回 res.data，结构为 { items, total, page, page_size }
+    const items = res?.items || res?.list || []
+    teacherOptions.value = items.map(u => ({
+      value: u.id,
+      label: u.real_name || u.username
+    }))
+  } catch (e) {
+    console.error('加载教师列表失败:', e)
+  } finally {
+    teacherLoading.value = false
+  }
+}
 
 const scoreForm = reactive({
   presentation_score: 7,
@@ -560,6 +748,69 @@ const scoreRules = {
   total_score: [{ required: true, message: '请输入答辩成绩', trigger: 'blur' }],
   opinion: [{ required: true, message: '请输入答辩评语', trigger: 'blur' }],
   result: [{ required: true, message: '请选择答辩结果', trigger: 'change' }]
+}
+
+// 评阅意见书上传
+const reviewFileList = ref([])
+const reviewUploadedFile = ref(null)
+// 答辩记录上传
+const defenseFileList = ref([])
+const defenseUploadedFile = ref(null)
+
+const handleReviewFileChange = (file) => {
+  const ext = (file.name || '').substring((file.name || '').lastIndexOf('.')).toLowerCase()
+  if (!['.doc', '.docx', '.pdf'].includes(ext)) {
+    ElMessage.error('仅支持 doc、docx、pdf 格式')
+    reviewFileList.value = []
+    return
+  }
+  reviewFileList.value = [file]
+}
+const handleReviewFileRemove = () => {
+  reviewFileList.value = []
+  reviewUploadedFile.value = null
+}
+
+const handleDefenseFileChange = (file) => {
+  const ext = (file.name || '').substring((file.name || '').lastIndexOf('.')).toLowerCase()
+  if (!['.doc', '.docx', '.pdf'].includes(ext)) {
+    ElMessage.error('仅支持 doc、docx、pdf 格式')
+    defenseFileList.value = []
+    return
+  }
+  defenseFileList.value = [file]
+}
+const handleDefenseFileRemove = () => {
+  defenseFileList.value = []
+  defenseUploadedFile.value = null
+}
+
+const uploadReviewFile = async () => {
+  if (!reviewFileList.value.length) return null
+  const rawFile = reviewFileList.value[0].raw
+  if (!rawFile) return null  // 已有文件引用，无需重新上传
+  const formData = new FormData()
+  formData.append('file', rawFile)
+  const res = await request.post('/files/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    params: { module: 'review' }
+  })
+  reviewUploadedFile.value = { id: res.id, file_path: res.file_path, file_name: res.original_name }
+  return reviewUploadedFile.value
+}
+
+const uploadDefenseFile = async () => {
+  if (!defenseFileList.value.length) return null
+  const rawFile = defenseFileList.value[0].raw
+  if (!rawFile) return null  // 已有文件引用，无需重新上传
+  const formData = new FormData()
+  formData.append('file', rawFile)
+  const res = await request.post('/files/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    params: { module: 'defense' }
+  })
+  defenseUploadedFile.value = { id: res.id, file_path: res.file_path, file_name: res.original_name }
+  return defenseUploadedFile.value
 }
 
 let currentRow = null
@@ -657,10 +908,11 @@ const resetDefenseSearch = () => {
 const handleAssignReviewer = (row) => {
   currentRow = row
   assignForm.topic_id = row?.topic_id || null
-  assignForm.reviewer_id = ''
+  assignForm.reviewer_id = null
   assignForm.deadline = ''
   assignDialogVisible.value = true
   loadTopicOptions(reviewList.value.map(r => r.topic_id))
+  loadTeachers()
 }
 
 // 加载选题列表（排除已使用的选题）
@@ -684,7 +936,7 @@ const submitAssign = async () => {
     assignLoading.value = true
     const payload = {
       topic_id: assignForm.topic_id,
-      reviewer_id: parseInt(assignForm.reviewer_id),
+      reviewer_id: assignForm.reviewer_id,
       deadline: assignForm.deadline
     }
     if (currentRow?.student_id) payload.student_id = currentRow.student_id
@@ -704,6 +956,7 @@ const submitAssign = async () => {
 
 const handleSubmitReview = (row) => {
   currentRow = row
+  editingReviewId.value = null
   reviewSubmitForm.total_score = null
   reviewSubmitForm.opinion = ''
   reviewSubmitForm.topic_score = 7
@@ -713,7 +966,52 @@ const handleSubmitReview = (row) => {
   reviewSubmitForm.format_score = 7
   reviewSubmitForm.suggestions = ''
   reviewSubmitForm.result = 'pass'
+  reviewFileList.value = []
+  reviewUploadedFile.value = null
   reviewSubmitDialogVisible.value = true
+}
+
+const handleEditReview = async (row) => {
+  currentRow = row
+  editingReviewId.value = row.id
+  try {
+    const res = await request.get(`/reviews/${row.id}`)
+    const detail = res.data || res
+    // 后端存储 0-100 分制，前端 el-rate 使用 0-10 分制，需要除以 10
+    reviewSubmitForm.total_score = detail.total_score ?? null
+    reviewSubmitForm.opinion = detail.opinion || ''
+    reviewSubmitForm.topic_score = Math.round((detail.topic_score || 0) / 10)
+    reviewSubmitForm.content_score = Math.round((detail.content_score || 0) / 10)
+    reviewSubmitForm.method_score = Math.round((detail.method_score || 0) / 10)
+    reviewSubmitForm.innovation_score = Math.round((detail.innovation_score || 0) / 10)
+    reviewSubmitForm.format_score = Math.round((detail.format_score || 0) / 10)
+    reviewSubmitForm.suggestions = detail.suggestions || ''
+    reviewSubmitForm.result = detail.result || 'pass'
+    reviewFileList.value = []
+    reviewUploadedFile.value = null
+    if (detail.review_file_name) {
+      reviewFileList.value = [{ name: detail.review_file_name, url: detail.review_file_path }]
+    }
+    reviewSubmitDialogVisible.value = true
+  } catch (error) {
+    console.error('获取评阅详情失败:', error)
+  }
+}
+
+const handleDeleteReview = (row) => {
+  ElMessageBox.confirm(`确定要删除该评阅记录吗？删除后不可恢复。`, '删除确认', {
+    confirmButtonText: '确定删除',
+    cancelButtonText: '取消',
+    type: 'warning'
+  }).then(async () => {
+    try {
+      await deleteReview(row.id)
+      ElMessage.success('删除成功')
+      loadReviewList()
+    } catch (error) {
+      console.error('删除失败:', error)
+    }
+  }).catch(() => {})
 }
 
 const submitReviewForm = async () => {
@@ -721,6 +1019,8 @@ const submitReviewForm = async () => {
   try {
     await reviewSubmitFormRef.value.validate()
     reviewSubmitLoading.value = true
+    // 上传评阅意见书
+    const reviewFile = await uploadReviewFile()
     // 将 0-10 评分转换为 0-100 分制
     const payload = {
       ...reviewSubmitForm,
@@ -730,9 +1030,22 @@ const submitReviewForm = async () => {
       innovation_score: reviewSubmitForm.innovation_score * 10,
       format_score: reviewSubmitForm.format_score * 10
     }
-    await request.post(`/reviews/${currentRow.id}/submit`, payload)
-    ElMessage.success('评阅提交成功')
+    if (reviewFile) {
+      payload.review_file_id = reviewFile.id
+      payload.review_file_path = reviewFile.file_path
+      payload.review_file_name = reviewFile.file_name
+    }
+    if (editingReviewId.value) {
+      await updateReview(editingReviewId.value, payload)
+      ElMessage.success('评阅修改成功')
+    } else {
+      await request.post(`/reviews/${currentRow.id}/submit`, payload)
+      ElMessage.success('评阅提交成功')
+    }
     reviewSubmitDialogVisible.value = false
+    editingReviewId.value = null
+    reviewFileList.value = []
+    reviewUploadedFile.value = null
     loadReviewList()
   } catch (error) {
     if (error !== false) {
@@ -761,10 +1074,11 @@ const handleScheduleDefense = (row) => {
   scheduleForm.defense_time_start = ''
   scheduleForm.defense_time_end = ''
   scheduleForm.location = ''
-  scheduleForm.committee_members = ''
-  scheduleForm.secretary_id = ''
+  scheduleForm.committee_members = []
+  scheduleForm.secretary_id = null
   scheduleDialogVisible.value = true
   loadTopicOptions(defenseList.value.map(d => d.topic_id))
+  loadTeachers()
 }
 
 const submitSchedule = async () => {
@@ -773,10 +1087,21 @@ const submitSchedule = async () => {
     await scheduleFormRef.value.validate()
     scheduleLoading.value = true
     const payload = { ...scheduleForm }
-    // 清理空字符串字段，避免后端类型校验失败
+    // 委员会成员数组转逗号分隔字符串
+    if (Array.isArray(payload.committee_members)) {
+      payload.committee_members = payload.committee_members.length
+        ? payload.committee_members.join(',')
+        : ''
+    }
+    // 清理空值字段，避免后端类型校验失败
     if (!payload.secretary_id) delete payload.secretary_id
     if (!payload.committee_members) delete payload.committee_members
-    await request.post('/defenses', payload)
+    // 若已有答辩记录（如重新答辩申请），则更新；否则新建
+    if (currentRow && currentRow.id) {
+      await request.put(`/defenses/${currentRow.id}`, { ...payload, status: 'scheduled' })
+    } else {
+      await request.post('/defenses', payload)
+    }
     ElMessage.success('安排成功')
     scheduleDialogVisible.value = false
     loadDefenseList()
@@ -791,6 +1116,7 @@ const submitSchedule = async () => {
 
 const handleScoreDefense = (row) => {
   currentRow = row
+  editingDefenseId.value = null
   scoreForm.presentation_score = 7
   scoreForm.qa_score = 7
   scoreForm.thesis_quality_score = 7
@@ -798,7 +1124,50 @@ const handleScoreDefense = (row) => {
   scoreForm.opinion = ''
   scoreForm.grade = ''
   scoreForm.result = 'pass'
+  defenseFileList.value = []
+  defenseUploadedFile.value = null
   scoreDialogVisible.value = true
+}
+
+const handleEditDefense = async (row) => {
+  currentRow = row
+  editingDefenseId.value = row.id
+  try {
+    const res = await request.get(`/defenses/${row.id}`)
+    const detail = res.data || res
+    // 后端存储 0-100 分制，前端 el-rate 使用 0-10 分制，需要除以 10
+    scoreForm.presentation_score = Math.round((detail.presentation_score || 0) / 10)
+    scoreForm.qa_score = Math.round((detail.qa_score || 0) / 10)
+    scoreForm.thesis_quality_score = Math.round((detail.thesis_quality_score || 0) / 10)
+    scoreForm.total_score = detail.total_score ?? null
+    scoreForm.opinion = detail.opinion || ''
+    scoreForm.grade = detail.grade || ''
+    scoreForm.result = detail.result || 'pass'
+    defenseFileList.value = []
+    defenseUploadedFile.value = null
+    if (detail.defense_file_name) {
+      defenseFileList.value = [{ name: detail.defense_file_name, url: detail.defense_file_path }]
+    }
+    scoreDialogVisible.value = true
+  } catch (error) {
+    console.error('获取答辩详情失败:', error)
+  }
+}
+
+const handleDeleteDefense = (row) => {
+  ElMessageBox.confirm(`确定要删除该答辩记录吗？删除后不可恢复。`, '删除确认', {
+    confirmButtonText: '确定删除',
+    cancelButtonText: '取消',
+    type: 'warning'
+  }).then(async () => {
+    try {
+      await deleteDefense(row.id)
+      ElMessage.success('删除成功')
+      loadDefenseList()
+    } catch (error) {
+      console.error('删除失败:', error)
+    }
+  }).catch(() => {})
 }
 
 const submitScore = async () => {
@@ -806,9 +1175,31 @@ const submitScore = async () => {
   try {
     await scoreFormRef.value.validate()
     scoreLoading.value = true
-    await request.post(`/defenses/${currentRow.id}/score`, scoreForm)
-    ElMessage.success('评分提交成功')
+    // 上传答辩记录
+    const defenseFile = await uploadDefenseFile()
+    // 将 0-10 评分转换为 0-100 分制
+    const payload = {
+      ...scoreForm,
+      presentation_score: scoreForm.presentation_score * 10,
+      qa_score: scoreForm.qa_score * 10,
+      thesis_quality_score: scoreForm.thesis_quality_score * 10
+    }
+    if (defenseFile) {
+      payload.defense_file_id = defenseFile.id
+      payload.defense_file_path = defenseFile.file_path
+      payload.defense_file_name = defenseFile.file_name
+    }
+    if (editingDefenseId.value) {
+      await scoreDefense(editingDefenseId.value, payload)
+      ElMessage.success('答辩评分修改成功')
+    } else {
+      await request.post(`/defenses/${currentRow.id}/score`, payload)
+      ElMessage.success('评分提交成功')
+    }
     scoreDialogVisible.value = false
+    editingDefenseId.value = null
+    defenseFileList.value = []
+    defenseUploadedFile.value = null
     loadDefenseList()
   } catch (error) {
     if (error !== false) {

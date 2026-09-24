@@ -169,17 +169,26 @@
             {{ formatTime(row.detection_time) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right" align="center">
+        <el-table-column label="操作" width="240" fixed="right" align="center">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="handleViewDetail(row)">详情</el-button>
             <el-button
-              v-if="row.review_status === 'pending'"
+              v-if="canManageAnomaly && row.review_status === 'pending'"
               type="success"
               link
               size="small"
               @click="handleReview(row)"
             >
               复核
+            </el-button>
+            <el-button
+              v-if="canManageAnomaly"
+              type="danger"
+              link
+              size="small"
+              @click="handleDelete(row)"
+            >
+              删除
             </el-button>
           </template>
         </el-table-column>
@@ -320,78 +329,45 @@
       v-model="evaluateVisible"
       title="准确性评估"
       width="550px"
+      @open="runEvaluation"
     >
       <div v-loading="evaluateLoading" class="evaluate-content">
-        <div class="eval-dataset">
-          <el-radio-group v-model="evalDataset" @change="runEvaluation">
-            <el-radio-button value="all">模拟数据（综合）</el-radio-button>
-            <el-radio-button value="real">真实数据（已复核）</el-radio-button>
-          </el-radio-group>
+        <div class="eval-tip">
+          <el-icon><InfoFilled /></el-icon>
+          基于已人工复核的真实业务数据计算精确率等指标
         </div>
         <template v-if="evaluateResult">
-          <!-- 模拟数据：完整指标 -->
-          <template v-if="evaluateResult.evaluation_type !== 'real'">
-            <el-row :gutter="20" class="evaluate-stats">
-              <el-col :span="8">
-                <div class="eval-stat">
-                  <div class="eval-value">{{ Math.round((evaluateResult.precision || 0) * 100) }}%</div>
-                  <div class="eval-label">精确率</div>
-                </div>
-              </el-col>
-              <el-col :span="8">
-                <div class="eval-stat">
-                  <div class="eval-value">{{ Math.round((evaluateResult.recall || 0) * 100) }}%</div>
-                  <div class="eval-label">召回率</div>
-                </div>
-              </el-col>
-              <el-col :span="8">
-                <div class="eval-stat">
-                  <div class="eval-value">{{ Math.round((evaluateResult.f1_score || 0) * 100) }}%</div>
-                  <div class="eval-label">F1 分数</div>
-                </div>
-              </el-col>
-            </el-row>
-            <el-descriptions :column="1" border class="mt-20">
-              <el-descriptions-item label="样本总数">{{ evaluateResult.total_samples || 0 }}</el-descriptions-item>
-              <el-descriptions-item label="确认异常数">{{ evaluateResult.true_positives || 0 }}</el-descriptions-item>
-              <el-descriptions-item label="误报数">{{ evaluateResult.false_positives || 0 }}</el-descriptions-item>
-              <el-descriptions-item label="漏报数">{{ evaluateResult.false_negatives || 0 }}</el-descriptions-item>
-            </el-descriptions>
-          </template>
-          <!-- 真实数据：精确率 + 复核覆盖 + 检出率 -->
-          <template v-else>
-            <el-row :gutter="20" class="evaluate-stats">
-              <el-col :span="8">
-                <div class="eval-stat">
-                  <div class="eval-value">{{ Math.round((evaluateResult.precision || 0) * 100) }}%</div>
-                  <div class="eval-label">精确率</div>
-                </div>
-              </el-col>
-              <el-col :span="8">
-                <div class="eval-stat">
-                  <div class="eval-value">{{ Math.round((evaluateResult.reviewed_rate || 0) * 100) }}%</div>
-                  <div class="eval-label">复核覆盖率</div>
-                </div>
-              </el-col>
-              <el-col :span="8">
-                <div class="eval-stat">
-                  <div class="eval-value">{{ Math.round((evaluateResult.anomaly_rate || 0) * 100) }}%</div>
-                  <div class="eval-label">异常检出率</div>
-                </div>
-              </el-col>
-            </el-row>
-            <el-descriptions :column="1" border class="mt-20">
-              <el-descriptions-item label="检测记录总数">{{ evaluateResult.total_samples || 0 }}</el-descriptions-item>
-              <el-descriptions-item label="已复核数">{{ evaluateResult.reviewed_total || 0 }}</el-descriptions-item>
-              <el-descriptions-item label="确认异常(TP)">{{ evaluateResult.true_positives || 0 }}</el-descriptions-item>
-              <el-descriptions-item label="误报(FP)">{{ evaluateResult.false_positives || 0 }}</el-descriptions-item>
-              <el-descriptions-item label="已处理">{{ evaluateResult.resolved_count || 0 }}</el-descriptions-item>
-              <el-descriptions-item label="待复核">{{ evaluateResult.pending_count || 0 }}</el-descriptions-item>
-            </el-descriptions>
-          </template>
+          <el-row :gutter="20" class="evaluate-stats">
+            <el-col :span="8">
+              <div class="eval-stat">
+                <div class="eval-value">{{ Math.round((evaluateResult.precision || 0) * 100) }}%</div>
+                <div class="eval-label">精确率</div>
+              </div>
+            </el-col>
+            <el-col :span="8">
+              <div class="eval-stat">
+                <div class="eval-value">{{ Math.round((evaluateResult.reviewed_rate || 0) * 100) }}%</div>
+                <div class="eval-label">复核覆盖率</div>
+              </div>
+            </el-col>
+            <el-col :span="8">
+              <div class="eval-stat">
+                <div class="eval-value">{{ Math.round((evaluateResult.anomaly_rate || 0) * 100) }}%</div>
+                <div class="eval-label">异常检出率</div>
+              </div>
+            </el-col>
+          </el-row>
+          <el-descriptions :column="1" border class="mt-20">
+            <el-descriptions-item label="检测记录总数">{{ evaluateResult.total_samples || 0 }}</el-descriptions-item>
+            <el-descriptions-item label="已复核数">{{ evaluateResult.reviewed_total || 0 }}</el-descriptions-item>
+            <el-descriptions-item label="确认异常(TP)">{{ evaluateResult.true_positives || 0 }}</el-descriptions-item>
+            <el-descriptions-item label="误报(FP)">{{ evaluateResult.false_positives || 0 }}</el-descriptions-item>
+            <el-descriptions-item label="已处理">{{ evaluateResult.resolved_count || 0 }}</el-descriptions-item>
+            <el-descriptions-item label="待复核">{{ evaluateResult.pending_count || 0 }}</el-descriptions-item>
+          </el-descriptions>
           <div class="eval-note">
             <el-icon><InfoFilled /></el-icon>
-            {{ evaluateResult.note || (evaluateResult.evaluation_type === 'real' ? '精确率基于已人工复核的记录计算' : '评估数据基于模拟数据集计算') }}
+            精确率基于已人工复核的记录计算
           </div>
         </template>
       </div>
@@ -401,13 +377,13 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Warning, VideoPlay, DataAnalysis, Search, Refresh, RefreshRight, InfoFilled
 } from '@element-plus/icons-vue'
 import {
   getAnomalyList, getAnomalyDetail, getAnomalyStats, getAnomalyReviews,
-  reviewAnomaly, detectAnomaly, evaluateAnomaly,
+  reviewAnomaly, detectAnomaly, evaluateAnomaly, deleteAnomalyRecord,
   getScheduleStatus, updateScheduleCron, pauseSchedule, resumeSchedule, triggerDetectionNow
 } from '@/api/anomaly'
 import dayjs from 'dayjs'
@@ -415,6 +391,8 @@ import { useUserStore } from '@/store/user'
 
 const userStore = useUserStore()
 const isAdmin = userStore.userInfo?.role === 'admin'
+const isTeacher = userStore.userInfo?.role === 'teacher'
+const canManageAnomaly = isAdmin || isTeacher
 
 const loading = ref(false)
 const detailLoading = ref(false)
@@ -594,6 +572,23 @@ const submitReview = async () => {
   }
 }
 
+const handleDelete = (row) => {
+  ElMessageBox.confirm(`确定删除这条异常记录吗？删除后不可恢复。`, '提示', {
+    type: 'warning',
+    confirmButtonText: '删除',
+    cancelButtonText: '取消'
+  }).then(async () => {
+    try {
+      await deleteAnomalyRecord(row.id)
+      ElMessage.success('删除成功')
+      loadList()
+      loadStats()
+    } catch (e) {
+      console.error('删除失败:', e)
+    }
+  }).catch(() => {})
+}
+
 const handleDetect = async () => {
   try {
     ElMessage.info('正在启动异常检测，请稍候...')
@@ -607,22 +602,14 @@ const handleDetect = async () => {
 }
 
 const handleEvaluate = () => {
-  evalDataset.value = 'all'
   evaluateVisible.value = true
-  runEvaluation()
 }
-
-// 评估数据集：all(模拟) / real(真实已复核)
-const evalDataset = ref('all')
 
 const runEvaluation = async () => {
   evaluateLoading.value = true
   evaluateResult.value = null
   try {
-    const res = await evaluateAnomaly({
-      dataset_type: evalDataset.value,
-      detection_method: 'combined'
-    })
+    const res = await evaluateAnomaly()
     evaluateResult.value = res
   } catch (error) {
     console.error('评估失败:', error)

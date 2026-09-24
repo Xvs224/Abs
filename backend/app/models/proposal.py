@@ -23,8 +23,6 @@ class Proposal(Base):
     technical_route = Column(Text, default="", comment="技术路线")
     expected_results = Column(Text, default="", comment="预期成果")
     schedule_plan = Column(Text, default="", comment="进度安排")
-    references_count = Column(Integer, default=0, comment="参考文献数量")
-    references_list = Column(Text, default="", comment="参考文献列表")
     word_count = Column(Integer, default=0, comment="字数")
 
     # 附件

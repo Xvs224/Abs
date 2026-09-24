@@ -153,6 +153,14 @@ export default {
     return request.get(`/reviews/${id}`)
   },
 
+  applyReview(versionId, reviewType = 'normal') {
+    return request.post('/reviews/apply', { version_id: versionId, review_type: reviewType })
+  },
+
+  applyRedefense() {
+    return request.post('/defenses/apply-redefense')
+  },
+
   getMyDefenses(params = {}) {
     return request.get('/defenses', { page: 1, page_size: 10, ...params })
   },
@@ -214,5 +222,22 @@ export default {
 
   updateMyInfo(userId, data) {
     return request.put(`/users/${userId}`, data)
+  },
+
+  // ===== 过程指导 =====
+  getGuidanceList(params = {}) {
+    return request.get('/guidance', { page: 1, page_size: 50, ...params })
+  },
+  getGuidanceDetail(id) {
+    return request.get(`/guidance/${id}`)
+  },
+  createGuidance(data) {
+    return request.post('/guidance', data)
+  },
+  replyGuidance(id, data) {
+    return request.post(`/guidance/${id}/reply`, data)
+  },
+  deleteGuidance(id) {
+    return request.delete(`/guidance/${id}`)
   }
 }

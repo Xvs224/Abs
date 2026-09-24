@@ -43,29 +43,6 @@
       </el-steps>
     </div>
 
-    <div class="stages-grid">
-      <div
-        v-for="stage in stages"
-        :key="stage.path"
-        class="stage-card"
-        :class="{ 'stage-done': stage.isDone, 'stage-current': stage.isCurrent, 'stage-pending': !stage.isDone && !stage.isCurrent }"
-        @click="goToStage(stage.path)"
-      >
-        <div class="stage-card-header">
-          <el-icon size="20"><component :is="stage.icon" /></el-icon>
-          <span class="stage-card-title">{{ stage.title }}</span>
-          <el-tag :type="stage.tagType" size="small" effect="plain">{{ stage.description }}</el-tag>
-        </div>
-        <div class="stage-card-body" v-if="stage.detail">
-          {{ stage.detail }}
-        </div>
-        <div class="stage-card-footer">
-          <span class="stage-action">{{ stage.isDone ? '查看详情' : stage.isCurrent ? '去处理' : '未开始' }}</span>
-          <el-icon><ArrowRight /></el-icon>
-        </div>
-      </div>
-    </div>
-
     <el-row :gutter="20" style="margin-top: 20px;">
       <el-col :span="24">
         <el-card shadow="hover">
@@ -349,7 +326,7 @@ onMounted(() => {
 }
 
 .welcome-card {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #38bdf8 0%, #0ea5e9 100%);
   border-radius: 12px;
   padding: 24px 32px;
   color: #fff;
@@ -357,6 +334,7 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+  box-shadow: 0 4px 16px rgba(14, 165, 233, 0.25);
 
   .welcome-text h2 { margin: 0 0 8px; font-size: 22px; }
   .welcome-text p { margin: 0; opacity: 0.9; font-size: 14px; }

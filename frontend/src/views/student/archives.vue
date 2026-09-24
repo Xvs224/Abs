@@ -1,10 +1,11 @@
 <template>
   <div class="student-archives">
+    <StageBanner module-key="archive" />
     <el-card shadow="never">
       <template #header>
         <div class="page-header">
           <span>成果归档</span>
-          <el-button type="primary" :icon="Plus" @click="openCreate" v-if="!currentArchive">提交归档申请</el-button>
+          <el-button type="primary" :icon="Plus" @click="openCreate" :disabled="isLocked" v-if="!currentArchive">提交归档申请</el-button>
         </div>
       </template>
 
@@ -20,7 +21,6 @@
           </el-descriptions-item>
           <el-descriptions-item label="提交时间">{{ formatDate(currentArchive.create_time) }}</el-descriptions-item>
           <el-descriptions-item label="归档时间" v-if="currentArchive.archive_time">{{ formatDate(currentArchive.archive_time) }}</el-descriptions-item>
-          <el-descriptions-item label="归档位置" :span="2" v-if="currentArchive.archive_location">{{ currentArchive.archive_location }}</el-descriptions-item>
           <el-descriptions-item label="审核意见" :span="2" v-if="currentArchive.return_reason">
             <span class="reject-text">{{ currentArchive.return_reason }}</span>
           </el-descriptions-item>
@@ -42,7 +42,7 @@
       </div>
 
       <el-empty v-else description="您还未提交归档申请">
-        <el-button type="primary" @click="openCreate">提交归档申请</el-button>
+        <el-button type="primary" @click="openCreate" :disabled="isLocked">提交归档申请</el-button>
       </el-empty>
     </el-card>
 
@@ -88,17 +88,21 @@
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSubmit" :loading="submitting">提交</el-button>
+        <el-button type="primary" @click="handleSubmit" :loading="submitting" :disabled="isLocked">提交</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
+import StageBanner from '@/views/common/StageBanner.vue'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import studentApi from '@/api/student'
+import { useStageLock } from '@/composables/useStageLock'
+
+const { isLocked } = useStageLock('archive')
 
 const currentArchive = ref(null)
 const dialogVisible = ref(false)
@@ -152,7 +156,29 @@ const loadArchive = async () => {
   } catch (e) { /* silent */ }
 }
 
-const openCreate = () => {
+const openCreate = async () => {
+  // 检查答辩是否通过
+  try {
+    const defenseRes = await studentApi.getMyDefenses()
+    const defense = defenseRes?.items?.[0]
+    if (!defense) {
+      ElMessage.warning('您还没有答辩安排，无法进行成果归档')
+      return
+    }
+    if (defense.status !== 'completed') {
+      ElMessage.warning('答辩尚未完成，无法进行成果归档')
+      return
+    }
+    if (defense.result !== 'pass') {
+      const resultMap = { pass: '通过', fail: '未通过', reargue: '需重新答辩' }
+      const txt = resultMap[defense.result] || defense.result
+      ElMessage.warning(`答辩结果为「${txt}」，需答辩通过后才可进行成果归档`)
+      return
+    }
+  } catch (e) {
+    ElMessage.warning('获取答辩信息失败，无法进行成果归档')
+    return
+  }
   Object.assign(formData, {
     thesis_file: null, thesis_file_name: '',
     proposal_file: null, proposal_file_name: '',

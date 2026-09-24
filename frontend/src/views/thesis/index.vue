@@ -1,5 +1,6 @@
 <template>
   <div class="thesis-page">
+    <StageBanner :module-key="thesisModuleKey" />
     <!-- 操作栏 -->
     <el-card class="header-card" shadow="never">
       <div class="page-header">
@@ -8,7 +9,7 @@
           <p class="page-desc">管理论文的各个版本，支持上传、格式检测和版本对比</p>
         </div>
         <div class="header-actions">
-          <el-button type="primary" :icon="Upload" @click="handleUpload">
+          <el-button v-if="isStudent" type="primary" :icon="Upload" @click="handleUpload">
             {{ filteredVersionList.length > 0 ? '重新上传' : '上传' }}
           </el-button>
           <el-button :icon="RefreshRight" @click="loadList">刷新</el-button>
@@ -189,39 +190,6 @@
       :close-on-click-modal="false"
     >
       <el-form ref="uploadFormRef" :model="uploadForm" :rules="uploadRules" label-width="80px">
-        <el-form-item v-if="isTeacher" label="学生" prop="student_id">
-          <el-select
-            v-model="uploadForm.student_id"
-            placeholder="请选择学生"
-            filterable
-            style="width: 100%"
-            :loading="studentLoading"
-            @change="onStudentChange"
-          >
-            <el-option
-              v-for="s in studentOptions"
-              :key="s.id"
-              :label="`${s.real_name}（${s.student_no || '—'}）`"
-              :value="s.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item v-if="isTeacher" label="论文题目" prop="topic_id">
-          <el-select
-            v-model="uploadForm.topic_id"
-            placeholder="请选择论文题目"
-            filterable
-            style="width: 100%"
-            :loading="topicLoading"
-          >
-            <el-option
-              v-for="t in topicOptions"
-              :key="t.id"
-              :label="t.title"
-              :value="t.id"
-            />
-          </el-select>
-        </el-form-item>
         <el-form-item label="文件">
           <el-upload
             ref="uploadRef"
@@ -332,6 +300,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import StageBanner from '@/views/common/StageBanner.vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -345,12 +314,19 @@ import { useUserStore } from '@/store/user'
 const route = useRoute()
 const userStore = useUserStore()
 const isTeacher = computed(() => userStore.userInfo?.role === 'teacher')
+const isStudent = computed(() => userStore.userInfo?.role === 'student')
 // 根据路由确定版本阶段: draft1=一稿, draft2=二稿, final=终审
 const versionStage = computed(() => {
   if (route.path.includes('/draft2')) return 'draft2'
   if (route.path.includes('/final')) return 'final'
   return 'draft1'
 })
+// 阶段时间配置的 module_key 映射
+const thesisModuleKey = computed(() => ({
+  draft1: 'thesis_draft',
+  draft2: 'thesis_revision',
+  final: 'thesis_final',
+}[versionStage.value]))
 // 当前阶段对应的版本号
 const currentVersionNum = computed(() => ({
   draft1: 1,
@@ -368,6 +344,10 @@ const uploadFormRef = ref(null)
 const uploadRef = ref(null)
 const searchKeyword = ref('')
 const filterStudentId = ref(null)
+
+// 学生列表（教师端筛选查看）
+const studentOptions = ref([])
+const studentLoading = ref(false)
 
 const versionList = ref([])
 // 按阶段筛选版本：一稿(v1)、二稿(v2)、终审(v3及以上)
@@ -389,54 +369,11 @@ const pagination = reactive({
 
 const fileList = ref([])
 const uploadForm = reactive({
-  student_id: null,
-  topic_id: null,
   change_log: ''
 })
 
 const uploadRules = {
   change_log: []
-}
-
-// 学生列表（教师端上传时选择）
-const studentOptions = ref([])
-const studentLoading = ref(false)
-// 选题列表（根据所选学生筛选）
-const topicOptions = ref([])
-const topicLoading = ref(false)
-
-const loadStudents = async () => {
-  studentLoading.value = true
-  try {
-    const res = await request.get('/users', { page: 1, page_size: 100, role: 'student' })
-    studentOptions.value = res.items || res.data || []
-  } catch (error) {
-    console.error('加载学生列表失败:', error)
-  } finally {
-    studentLoading.value = false
-  }
-}
-
-const loadTopicsByStudent = async (studentId) => {
-  if (!studentId) {
-    topicOptions.value = []
-    return
-  }
-  topicLoading.value = true
-  try {
-    const res = await request.get('/topics', { page: 1, page_size: 100, student_id: studentId, status: 'approved' })
-    topicOptions.value = res.items || res.data || []
-    // 自动选中第一个选题
-    if (topicOptions.value.length > 0) {
-      uploadForm.topic_id = topicOptions.value[0].id
-    } else {
-      uploadForm.topic_id = null
-    }
-  } catch (error) {
-    console.error('加载选题列表失败:', error)
-  } finally {
-    topicLoading.value = false
-  }
 }
 
 const compareVersions = ref([])
@@ -514,16 +451,9 @@ const loadList = async () => {
 }
 
 const handleUpload = () => {
-  uploadForm.student_id = null
-  uploadForm.topic_id = null
   uploadForm.change_log = ''
   fileList.value = []
-  topicOptions.value = []
   uploadVisible.value = true
-  // 教师端需要加载学生列表
-  if (isTeacher.value) {
-    loadStudents()
-  }
 }
 
 const handleFileChange = (file, fileList) => {
@@ -534,10 +464,16 @@ const handleExceed = () => {
   ElMessage.warning('只能上传一个文件')
 }
 
-// 选择学生后加载其选题
-const onStudentChange = (studentId) => {
-  uploadForm.topic_id = null
-  loadTopicsByStudent(studentId)
+const loadStudents = async () => {
+  studentLoading.value = true
+  try {
+    const res = await request.get('/users', { page: 1, page_size: 100, role: 'student' })
+    studentOptions.value = res.items || res.data || []
+  } catch (error) {
+    console.error('加载学生列表失败:', error)
+  } finally {
+    studentLoading.value = false
+  }
 }
 
 const submitUpload = async () => {
@@ -545,27 +481,12 @@ const submitUpload = async () => {
     ElMessage.warning('请选择要上传的文件')
     return
   }
-  // 教师端需要选择学生和选题
-  if (isTeacher.value) {
-    if (!uploadForm.student_id) {
-      ElMessage.warning('请选择学生')
-      return
-    }
-    if (!uploadForm.topic_id) {
-      ElMessage.warning('请选择论文题目')
-      return
-    }
-  }
   try {
     uploadLoading.value = true
     const formData = new FormData()
     formData.append('file', fileList.value[0].raw)
     formData.append('change_log', uploadForm.change_log)
     formData.append('version_num', currentVersionNum.value)
-    if (isTeacher.value) {
-      formData.append('student_id', uploadForm.student_id)
-      formData.append('topic_id', uploadForm.topic_id)
-    }
     await request.post('/thesis/versions', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })

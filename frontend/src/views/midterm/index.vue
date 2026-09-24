@@ -55,9 +55,14 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="110" align="center">
+        <el-table-column prop="status" label="状态" width="140" align="center">
           <template #default="{ row }">
-            <el-tag :type="statusTagType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
+            <div style="display:flex; flex-direction:column; gap:4px; align-items:center;">
+              <el-tag :type="statusTagType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
+              <el-tag v-if="row.pending_review_count > 0" type="danger" size="small" effect="dark">
+                待复检({{ row.pending_review_count }})
+              </el-tag>
+            </div>
           </template>
         </el-table-column>
         <el-table-column prop="submit_time" label="提交时间" width="160">
@@ -68,7 +73,9 @@
             <el-button type="primary" link size="small" @click="handleView(row)">详情</el-button>
             <el-button v-if="row.status === 'form_submitted' && isTeacher" type="warning" link size="small" @click="handleGuidance(row)">指导</el-button>
             <el-button v-if="(row.status === 'ppt_submitted' || row.status === 'rectified') && isTeacher" type="success" link size="small" @click="handleReview(row)">评审</el-button>
-            <el-button v-if="row.status === 'rectifying' && isTeacher" type="danger" link size="small" @click="handleRectification(row)">整改</el-button>
+            <el-button v-if="row.status === 'rectifying' && isTeacher" :type="row.pending_review_count > 0 ? 'danger' : 'warning'" link size="small" @click="handleRectification(row)">
+              {{ row.pending_review_count > 0 ? `复检(${row.pending_review_count})` : '整改' }}
+            </el-button>
             <!-- 管理员可删除/重交 -->
             <el-button v-if="isAdmin" type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
             <el-button v-if="isAdmin" type="warning" link size="small" @click="handleResubmit(row)">重交</el-button>
@@ -106,17 +113,18 @@
             </el-descriptions-item>
             <el-descriptions-item label="中期检查表" :span="2">
               <template v-if="currentDetail.file_name">
-                <el-button type="primary" link @click="handleDownload(currentDetail.file_id)">
-                  <el-icon><Document /></el-icon> {{ currentDetail.file_name }}
+                <el-button type="primary" link @click="handleDownload(currentDetail.file_id, currentDetail.file_name)">
+                  <el-icon><Download /></el-icon> {{ currentDetail.file_name }}
                 </el-button>
               </template>
               <span v-else style="color:#909399">未上传</span>
             </el-descriptions-item>
             <el-descriptions-item label="演示文稿(PPT)" :span="2">
               <template v-if="currentDetail.ppt_file_name">
-                <el-button type="primary" link @click="handleDownload(currentDetail.ppt_file_id)">
-                  <el-icon><Document /></el-icon> {{ currentDetail.ppt_file_name }}
+                <el-button type="primary" link @click="handleDownload(currentDetail.ppt_file_id, currentDetail.ppt_file_name)">
+                  <el-icon><Download /></el-icon> {{ currentDetail.ppt_file_name }}
                 </el-button>
+                <span style="color:#909399; margin-left:8px; font-size:12px;">（PPT文件请下载后查看）</span>
               </template>
               <span v-else style="color:#909399">未上传</span>
             </el-descriptions-item>
@@ -198,17 +206,38 @@
           <el-button type="primary" size="small" :icon="Plus" v-if='isTeacher' @click="showAddRectification = true">新增整改要求</el-button>
         </div>
         <el-table :data="rectificationList" v-loading="rectLoading" border size="small">
-          <el-table-column prop="problem_description" label="问题描述" min-width="150" show-overflow-tooltip />
-          <el-table-column prop="requirement" label="整改要求" min-width="150" show-overflow-tooltip />
-          <el-table-column prop="deadline" label="截止日期" width="120">
+          <el-table-column prop="problem_description" label="问题描述" min-width="120" show-overflow-tooltip />
+          <el-table-column prop="requirement" label="整改要求" min-width="120" show-overflow-tooltip />
+          <el-table-column prop="rectification_content" label="整改内容" min-width="120" show-overflow-tooltip />
+          <el-table-column label="整改PPT" width="110">
+            <template #default="{ row }">
+              <el-button
+                v-if="row.rectification_ppt_name"
+                type="primary" link size="small"
+                @click="handleRectPPTDownload(row)"
+              >{{ row.rectification_ppt_name }}</el-button>
+              <span v-else style="color:#909399">未上传</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="整改材料" width="110">
+            <template #default="{ row }">
+              <el-button
+                v-if="row.rectification_file_name"
+                type="primary" link size="small"
+                @click="handleRectFileDownload(row)"
+              >{{ row.rectification_file_name }}</el-button>
+              <span v-else style="color:#909399">未上传</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="deadline" label="截止日期" width="90">
             <template #default="{ row }">{{ row.deadline ? dayjs(row.deadline).format('YYYY-MM-DD') : '-' }}</template>
           </el-table-column>
-          <el-table-column prop="status" label="状态" width="100" align="center">
+          <el-table-column prop="status" label="状态" width="80" align="center">
             <template #default="{ row }">
               <el-tag :type="rectStatusType(row.status)" size="small">{{ rectStatusText(row.status) }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="100" align="center">
+          <el-table-column label="操作" width="70" align="center">
             <template #default="{ row }">
               <el-button v-if="row.status === 'submitted' && isTeacher" type="success" link size="small" @click="handleRecheck(row)">复检</el-button>
             </template>
@@ -235,10 +264,26 @@
         </el-form>
       </div>
 
-      <el-dialog v-model="recheckVisible" title="整改复检" width="450px" append-to-body>
+      <el-dialog v-model="recheckVisible" title="整改复检" width="500px" append-to-body>
         <el-form :model="recheckForm" label-width="80px">
           <el-form-item label="整改内容">
             <div class="rect-content-display">{{ currentRectification?.rectification_content || '-' }}</div>
+          </el-form-item>
+          <el-form-item label="整改PPT">
+            <template v-if="currentRectification?.rectification_ppt_name">
+              <el-button type="primary" link @click="handleRectPPTDownload(currentRectification)">
+                {{ currentRectification.rectification_ppt_name }}
+              </el-button>
+            </template>
+            <span v-else style="color:#909399">未上传</span>
+          </el-form-item>
+          <el-form-item label="整改材料">
+            <template v-if="currentRectification?.rectification_file_name">
+              <el-button type="primary" link @click="handleRectFileDownload(currentRectification)">
+                {{ currentRectification.rectification_file_name }}
+              </el-button>
+            </template>
+            <span v-else style="color:#909399">未上传</span>
           </el-form-item>
           <el-form-item label="复检结果">
             <el-radio-group v-model="recheckForm.review_result">
@@ -263,7 +308,7 @@
 import { useUserStore } from '@/store/user' 
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Refresh, Plus, RefreshRight, Document } from '@element-plus/icons-vue'
+import { Search, Refresh, Plus, RefreshRight, Download } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import dayjs from 'dayjs'
 
@@ -415,7 +460,7 @@ const submitReview = async () => {
   finally { reviewLoading.value = false }
 }
 
-const handleDownload = async (fileId) => {
+const handleDownload = async (fileId, fileName) => {
   if (!fileId) return
   try {
     const response = await request.download(`/files/${fileId}/download`)
@@ -423,6 +468,35 @@ const handleDownload = async (fileId) => {
     const url = window.URL.createObjectURL(new Blob([blob]))
     const link = document.createElement('a')
     link.href = url
+    if (fileName) link.download = fileName
+    link.click()
+    window.URL.revokeObjectURL(url)
+  } catch (e) { console.error('下载失败:', e) }
+}
+
+const handleRectFileDownload = async (row) => {
+  if (!row.rectification_file_path) return
+  try {
+    const response = await request.get('/files/download', { path: row.rectification_file_path }, { responseType: 'blob' })
+    const blob = response.data || response
+    const url = window.URL.createObjectURL(new Blob([blob]))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = row.rectification_file_name || '整改材料'
+    link.click()
+    window.URL.revokeObjectURL(url)
+  } catch (e) { console.error('下载失败:', e) }
+}
+
+const handleRectPPTDownload = async (row) => {
+  if (!row.rectification_ppt_path) return
+  try {
+    const response = await request.get('/files/download', { path: row.rectification_ppt_path }, { responseType: 'blob' })
+    const blob = response.data || response
+    const url = window.URL.createObjectURL(new Blob([blob]))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = row.rectification_ppt_name || '整改PPT'
     link.click()
     window.URL.revokeObjectURL(url)
   } catch (e) { console.error('下载失败:', e) }
@@ -449,6 +523,10 @@ const submitRectification = async () => {
     ElMessage.warning('请输入问题描述')
     return
   }
+  if (!rectForm.requirement.trim()) {
+    ElMessage.warning('请输入整改要求')
+    return
+  }
   try {
     rectSubmitting.value = true
     await request.post('/midterm/rectifications', {
@@ -464,6 +542,7 @@ const submitRectification = async () => {
     rectForm.deadline = null
     showAddRectification.value = false
     await loadRectifications(currentRow.value.id)
+    await loadList()
   } catch (e) { console.error('创建整改失败:', e) }
   finally { rectSubmitting.value = false }
 }
@@ -476,6 +555,10 @@ const handleRecheck = (row) => {
 }
 
 const submitRecheck = async () => {
+  if (!recheckForm.review_opinion.trim()) {
+    ElMessage.warning('请输入复检意见')
+    return
+  }
   try {
     recheckLoading.value = true
     await request.post(`/midterm/rectifications/${currentRectification.value.id}/review`, {
@@ -485,6 +568,7 @@ const submitRecheck = async () => {
     ElMessage.success(recheckForm.review_result === 'passed' ? '复检通过' : '复检不通过')
     recheckVisible.value = false
     await loadRectifications(currentRow.value.id)
+    await loadList()
   } catch (e) { console.error('复检失败:', e) }
   finally { recheckLoading.value = false }
 }

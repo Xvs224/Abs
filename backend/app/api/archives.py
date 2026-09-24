@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.core.response import success_response, page_response
 from app.core.security import get_current_user, require_admin, require_admin_or_teacher, require_teacher_only, require_student, require_student_or_teacher, require_any_authenticated
+from app.core.stage_gate import raise_if_locked
+from app.core.anomaly_hook import trigger_after_submit
 from app.schemas.archive import ArchiveCreate, ArchiveUpdate, ArchiveReview, ArchiveResponse
 from app.schemas.common import PaginationParams
 from app.models.user import User
@@ -45,7 +47,9 @@ def create_archive(
     current_user: User = Depends(require_student),
 ):
     """学生创建归档申请"""
+    raise_if_locked(db, "archive", current_user.role)
     result = archive_service.create_archive(db, data, current_user.id)
+    trigger_after_submit(db, current_user.id)
     return success_response(data=result, message="归档申请创建成功")
 
 
@@ -68,6 +72,8 @@ def update_archive(
     current_user: User = Depends(require_student_or_teacher),
 ):
     """更新归档信息"""
+    if current_user.role == "student":
+        raise_if_locked(db, "archive", current_user.role)
     result = archive_service.update_archive(db, archive_id, data, current_user)
     return success_response(data=result, message="归档更新成功")
 

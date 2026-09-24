@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.core.response import success_response, page_response
 from app.core.security import get_current_user, require_admin, require_admin_or_teacher, require_teacher_only, require_student, require_student_or_teacher, require_any_authenticated
+from app.core.stage_gate import raise_if_locked
 from app.schemas.topic import (
     TopicCreate, TopicUpdate, TopicReview, TopicResponse, TopicDuplicateCheck,
     TeacherTopicCreate, StudentTopicCreate, TopicSelect
@@ -69,6 +70,7 @@ def student_select_topic(
     current_user: User = Depends(require_student),
 ):
     """学生从教师发布的选题中选择一个"""
+    raise_if_locked(db, "topic", current_user.role)
     result = topic_service.student_select_topic(db, data.topic_id, current_user.id)
     return success_response(data=result, message="选题成功，等待教师审核")
 
@@ -80,6 +82,7 @@ def student_self_propose(
     current_user: User = Depends(require_student),
 ):
     """学生自拟选题提交审核"""
+    raise_if_locked(db, "topic", current_user.role)
     result = topic_service.student_create_topic(db, data, current_user.id)
     return success_response(data=result, message="选题已提交，等待审核")
 
@@ -102,6 +105,7 @@ def create_topic(
     current_user: User = Depends(require_student),
 ):
     """学生创建选题"""
+    raise_if_locked(db, "topic", current_user.role)
     result = topic_service.create_topic(db, data, current_user.id)
     return success_response(data=result, message="选题创建成功")
 

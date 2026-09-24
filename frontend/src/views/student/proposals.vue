@@ -1,10 +1,11 @@
 <template>
   <div class="student-proposals">
+    <StageBanner module-key="proposal" />
     <el-card shadow="never">
       <template #header>
         <div class="page-header">
           <span>开题报告</span>
-          <el-button type="primary" :icon="Plus" @click="openCreate" v-if="!currentProposal && myTopicId">新建开题报告</el-button>
+          <el-button type="primary" :icon="Plus" @click="openCreate" :disabled="isLocked" v-if="!currentProposal && myTopicId">新建开题报告</el-button>
         </div>
       </template>
 
@@ -15,7 +16,6 @@
             <el-tag :type="statusType(currentProposal.status)">{{ statusText(currentProposal.status) }}</el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="字数">{{ currentProposal.word_count || 0 }}</el-descriptions-item>
-          <el-descriptions-item label="参考文献数">{{ currentProposal.references_count || 0 }}</el-descriptions-item>
           <el-descriptions-item label="提交时间">{{ formatDate(currentProposal.submit_time) }}</el-descriptions-item>
           <el-descriptions-item label="审核时间">{{ formatDate(currentProposal.review_time) }}</el-descriptions-item>
           <el-descriptions-item label="开题报告文档" :span="2">
@@ -37,13 +37,13 @@
         </el-descriptions>
 
         <div class="proposal-actions" v-if="canEdit">
-          <el-button type="primary" @click="openEdit">编辑</el-button>
-          <el-button type="success" @click="handleSubmit" v-if="currentProposal.status === 'draft' || currentProposal.status === 'rejected'">提交审核</el-button>
+          <el-button type="primary" @click="openEdit" :disabled="isLocked">编辑</el-button>
+          <el-button type="success" @click="handleSubmit" :disabled="isLocked" v-if="currentProposal.status === 'draft' || currentProposal.status === 'rejected'">提交审核</el-button>
         </div>
       </div>
 
       <el-empty v-else :description="myTopicId ? '您还未创建开题报告' : '请先完成选题确认，选题通过后才能创建开题报告'">
-        <el-button type="primary" @click="openCreate" v-if="myTopicId">新建开题报告</el-button>
+        <el-button type="primary" @click="openCreate" :disabled="isLocked" v-if="myTopicId">新建开题报告</el-button>
         <el-button type="primary" @click="$router.push('/student/topics')" v-else>去选题</el-button>
       </el-empty>
     </el-card>
@@ -64,9 +64,6 @@
         </el-form-item>
         <el-form-item label="进度安排" prop="schedule_plan">
           <el-input type="textarea" v-model="formData.schedule_plan" :rows="4" placeholder="请描述进度安排" />
-        </el-form-item>
-        <el-form-item label="参考文献" prop="references_list">
-          <el-input type="textarea" v-model="formData.references_list" :rows="3" placeholder="请列出参考文献" />
         </el-form-item>
         <el-form-item label="开题报告" prop="file_id" required>
           <el-upload
@@ -90,18 +87,22 @@
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button @click="handleSaveDraft">保存草稿</el-button>
-        <el-button type="primary" @click="handleSubmitForm">提交审核</el-button>
+        <el-button @click="handleSaveDraft" :disabled="isLocked">保存草稿</el-button>
+        <el-button type="primary" @click="handleSubmitForm" :disabled="isLocked">提交审核</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
+import StageBanner from '@/views/common/StageBanner.vue'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus, Download, UploadFilled } from '@element-plus/icons-vue'
 import studentApi from '@/api/student'
+import { useStageLock } from '@/composables/useStageLock'
+
+const { isLocked } = useStageLock('proposal')
 
 const currentProposal = ref(null)
 const dialogVisible = ref(false)
@@ -113,7 +114,8 @@ const uploadedFile = ref(null) // { id, file_path, file_name }
 
 const formData = reactive({
   research_content: '', research_method: '', technical_route: '',
-  expected_results: '', schedule_plan: '', references_list: ''
+  expected_results: '', schedule_plan: '',
+  file_id: ''
 })
 
 const formRules = {
@@ -155,20 +157,24 @@ const handleFileChange = (file) => {
   if (!['.doc', '.docx', '.pdf'].includes(ext)) {
     ElMessage.error('仅支持 doc、docx、pdf 格式')
     fileList.value = []
+    formData.file_id = ''
     return
   }
   // 校验文件大小（50MB）
   if (file.size && file.size > 50 * 1024 * 1024) {
     ElMessage.error('文件大小不能超过 50MB')
     fileList.value = []
+    formData.file_id = ''
     return
   }
   fileList.value = [file]
+  formData.file_id = file.name
 }
 
 const handleFileRemove = () => {
   fileList.value = []
   uploadedFile.value = null
+  formData.file_id = ''
 }
 
 const handleExceed = () => {
@@ -192,7 +198,8 @@ const openCreate = () => {
   editMode.value = false
   Object.assign(formData, {
     research_content: '', research_method: '', technical_route: '',
-    expected_results: '', schedule_plan: '', references_list: ''
+    expected_results: '', schedule_plan: '',
+    file_id: ''
   })
   fileList.value = []
   uploadedFile.value = null
@@ -207,7 +214,7 @@ const openEdit = () => {
     technical_route: currentProposal.value.technical_route || '',
     expected_results: currentProposal.value.expected_results || '',
     schedule_plan: currentProposal.value.schedule_plan || '',
-    references_list: currentProposal.value.references_list || ''
+    file_id: currentProposal.value.file_id ? (currentProposal.value.file_name || '已上传') : ''
   })
   // 回显已上传文件
   if (currentProposal.value.file_name) {

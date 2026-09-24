@@ -101,17 +101,17 @@ const router = useRouter()
 const userStore = useUserStore()
 const appStore = useAppStore()
 
-// 教师/管理员端主题变量（专业、沉稳的蓝灰色系）
+// 教师/管理员端主题变量（清新浅色主题 - 柔和蓝绿色系）
 const themeVars = {
-  primary: '#2563eb',
-  primaryLight: '#3b82f6',
-  primaryLighter: '#dbeafe',
-  sidebarBg: '#1e293b',
-  sidebarLogoBg: '#0f172a',
-  sidebarText: '#cbd5e1',
-  sidebarActiveText: '#93c5fd',
-  sidebarActiveBg: 'rgba(37, 99, 235, 0.18)',
-  logoColor: '#60a5fa',
+  primary: '#0ea5e9',
+  primaryLight: '#38bdf8',
+  primaryLighter: '#e0f2fe',
+  sidebarBg: '#ffffff',
+  sidebarLogoBg: '#f8fafc',
+  sidebarText: '#64748b',
+  sidebarActiveText: '#0ea5e9',
+  sidebarActiveBg: '#e0f2fe',
+  logoColor: '#0ea5e9',
 }
 
 const activeMenu = computed(() => route.path)
@@ -133,6 +133,7 @@ const menuList = computed(() => {
     { path: 'topics', title: '选题管理', icon: 'Document', roles: ['admin', 'teacher'] },
     { path: 'proposals', title: '开题管理', icon: 'Files', roles: ['admin', 'teacher'] },
     { path: 'midterm', title: '中期检查', icon: 'CircleCheck', roles: ['admin', 'teacher'] },
+    { path: 'guidance', title: '过程指导', icon: 'ChatDotRound', roles: ['admin', 'teacher'] },
     {
       path: 'thesis',
       title: '论文版本',
@@ -168,7 +169,8 @@ const menuList = computed(() => {
       roles: ['admin'],
       children: [
         { path: 'users', title: '用户管理', icon: 'UserFilled' },
-        { path: 'logs', title: '操作日志', icon: 'List' }
+        { path: 'logs', title: '操作日志', icon: 'List' },
+        { path: 'stages', title: '阶段时间设定', icon: 'Timer' }
       ]
     })
   }
@@ -200,25 +202,25 @@ const handleCommand = (command) => {
 
 <style scoped lang="scss">
 .layout-container {
-  /* 教师/管理员端主题令牌 */
-  --primary: #2563eb;
-  --primary-light: #3b82f6;
-  --primary-lighter: #dbeafe;
-  --sidebar-bg: #1e293b;
-  --sidebar-logo-bg: #0f172a;
-  --sidebar-text: #cbd5e1;
-  --sidebar-active-text: #93c5fd;
-  --sidebar-active-bg: rgba(37, 99, 235, 0.18);
-  --sidebar-hover-bg: rgba(255, 255, 255, 0.06);
+  /* 教师/管理员端主题令牌 - 清新浅色主题 */
+  --primary: #0ea5e9;
+  --primary-light: #38bdf8;
+  --primary-lighter: #e0f2fe;
+  --sidebar-bg: #ffffff;
+  --sidebar-logo-bg: #f8fafc;
+  --sidebar-text: #64748b;
+  --sidebar-active-text: #0ea5e9;
+  --sidebar-active-bg: #e0f2fe;
+  --sidebar-hover-bg: #f1f5f9;
 
-  /* 覆盖 Element Plus 主色为教师端蓝 */
-  --el-color-primary: #2563eb;
-  --el-color-primary-light-3: #5b8def;
-  --el-color-primary-light-5: #84abf3;
-  --el-color-primary-light-7: #adc8f7;
-  --el-color-primary-light-8: #c2d6fa;
-  --el-color-primary-light-9: #d6e4fc;
-  --el-color-primary-dark-2: #1e4fbc;
+  /* 覆盖 Element Plus 主色为天蓝 */
+  --el-color-primary: #0ea5e9;
+  --el-color-primary-light-3: #38bdf8;
+  --el-color-primary-light-5: #7dd3fc;
+  --el-color-primary-light-7: #bae6fd;
+  --el-color-primary-light-8: #e0f2fe;
+  --el-color-primary-light-9: #f0f9ff;
+  --el-color-primary-dark-2: #0284c7;
 
   display: flex;
   height: 100vh;
@@ -228,10 +230,12 @@ const handleCommand = (command) => {
 .sidebar {
   width: var(--sidebar-width);
   background: var(--sidebar-bg);
+  border-right: 1px solid #e2e8f0;
   transition: width 0.3s;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.03);
 
   &.collapsed {
     width: var(--sidebar-collapsed-width);
@@ -244,11 +248,12 @@ const handleCommand = (command) => {
     justify-content: center;
     gap: 10px;
     background: var(--sidebar-logo-bg);
-    color: #fff;
+    color: var(--primary);
     font-size: 16px;
     font-weight: 600;
     white-space: nowrap;
     overflow: hidden;
+    border-bottom: 1px solid #e2e8f0;
 
     .logo-text {
       font-size: 15px;
@@ -265,6 +270,9 @@ const handleCommand = (command) => {
       height: 50px;
       line-height: 50px;
       transition: var(--transition-base);
+      margin: 4px 12px;
+      border-radius: 8px;
+      width: auto;
 
       &:hover {
         background-color: var(--sidebar-hover-bg) !important;
@@ -273,7 +281,8 @@ const handleCommand = (command) => {
 
     :deep(.el-menu-item.is-active) {
       background-color: var(--sidebar-active-bg) !important;
-      border-right: 3px solid var(--sidebar-active-text);
+      color: var(--sidebar-active-text) !important;
+      font-weight: 600;
     }
   }
 }

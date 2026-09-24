@@ -2,7 +2,7 @@
   <div class="login-container">
     <div class="login-box">
       <div class="login-header">
-        <el-icon size="48" color="#409eff"><DataAnalysis /></el-icon>
+        <el-icon size="48" color="#ffffff"><DataAnalysis /></el-icon>
         <h1>毕业论文质量监控系统</h1>
         <p>基于异常检测的全过程质量监控平台</p>
       </div>
@@ -155,7 +155,7 @@ const getRoleLabel = (role) => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #38bdf8 0%, #0ea5e9 100%);
   position: relative;
   overflow: hidden;
 
@@ -234,14 +234,14 @@ const getRoleLabel = (role) => {
     }
 
     &:hover {
-      border-color: #409eff;
-      color: #409eff;
+      border-color: #0ea5e9;
+      color: #0ea5e9;
     }
 
     &.active {
-      border-color: #409eff;
-      background: #ecf5ff;
-      color: #409eff;
+      border-color: #0ea5e9;
+      background: #e0f2fe;
+      color: #0ea5e9;
     }
   }
 }
